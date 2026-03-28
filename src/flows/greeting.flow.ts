@@ -6,7 +6,7 @@ import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { logger } from '../utils/logger.js';
 import { InlineKeyboard } from 'grammy';
 
-const WEBAPP_URL = 'https://xetux2-webapp.zbawxh.easypanel.host/';
+const WEBAPP_BASE_URL = 'https://xetux2-webapp.zbawxh.easypanel.host/';
 
 const WELCOME_NO_XETUX =
   '¡Bienvenido a Xetux! 🚀\n\n' +
@@ -38,9 +38,11 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
       metadata: { xetuxId: xetuxId ?? null, telegramUserId: telegramUserId ?? null },
     },
     async () => {
+      const webappUrl = `${WEBAPP_BASE_URL}?contact_id=${contact?.id ?? ''}&conversation_id=${conversation.id}`;
+
       if (!telegramUserId) {
         const content = !xetuxId
-          ? WELCOME_NO_XETUX + `\n\n🔗 ${WEBAPP_URL}\n\n${MENU_TEXT}`
+          ? WELCOME_NO_XETUX + `\n\n🔗 ${webappUrl}\n\n${MENU_TEXT}`
           : WELCOME_WITH_XETUX + `\n\n${MENU_TEXT}`;
         await chatwootService.sendMessage(conversation.id, { content, message_type: 'outgoing' });
         return { greeting: 'chatwoot_only', xetuxId: xetuxId ?? null };
@@ -51,7 +53,7 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
       if (!xetuxId) {
         // No xetux_id: send login button + greeting
         const loginKeyboard = new InlineKeyboard()
-          .webApp('🔑 Iniciar sesión', WEBAPP_URL);
+          .webApp('🔑 Iniciar sesión', webappUrl);
 
         const sentMsg = await bot.api.sendMessage(telegramUserId, WELCOME_NO_XETUX, {
           reply_markup: loginKeyboard,
@@ -59,7 +61,7 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
         telegramMessageId = sentMsg.message_id;
 
         await chatwootService.sendMessage(conversation.id, {
-          content: WELCOME_NO_XETUX + `\n\n🔗 [Iniciar sesión](${WEBAPP_URL})\n\n${MENU_TEXT}`,
+          content: WELCOME_NO_XETUX + `\n\n🔗 [Iniciar sesión](${webappUrl})\n\n${MENU_TEXT}`,
           message_type: 'outgoing',
           content_attributes: { external_created_at: new Date().toISOString() },
           source_id: String(telegramMessageId),
