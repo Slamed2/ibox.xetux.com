@@ -195,8 +195,14 @@ const WEBAPP_HTML = `<!DOCTYPE html>
         // Auto-format Xetux ID: uppercase, 2 letters (MX/VE) + 5 digits, no dash
         document.getElementById('xetux_id').addEventListener('input', function() {
             var val = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-            // Check prefix: must start with MX or VE
-            if (val.length >= 2 && !(/^(MX|VE|M|V)/.test(val))) {
+            // First character must be a letter (M or V)
+            if (val.length >= 1 && /^[0-9]/.test(val)) {
+                tg.showAlert('El Xetux ID debe comenzar con MX o VE');
+                this.value = '';
+                return;
+            }
+            // Check prefix: must start with M/V then MX/VE
+            if (val.length >= 2 && !(/^(MX|VE)/.test(val))) {
                 tg.showAlert('El Xetux ID debe comenzar con MX o VE');
                 this.value = '';
                 return;
