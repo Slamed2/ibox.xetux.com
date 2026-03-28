@@ -65,11 +65,13 @@ export const chatwootPlugin: FastifyPluginAsync = async (fastify) => {
       return { status: 'ok' };
     }
 
-    // Skip events triggered by agents/bots (only process contact-originated events)
-    const messageSenderType = payload.message?.sender?.type;
-    if (messageSenderType && messageSenderType !== 'contact') {
-      logger.debug({ event, senderType: messageSenderType }, 'Ignoring non-contact message');
-      return { status: 'ok' };
+    // Skip message_created events triggered by agents/bots (only process contact messages)
+    if (event === 'message_created') {
+      const messageSenderType = payload.message?.sender?.type;
+      if (messageSenderType && messageSenderType !== 'contact') {
+        logger.debug({ event, senderType: messageSenderType }, 'Ignoring non-contact message');
+        return { status: 'ok' };
+      }
     }
 
     const conversationId = payload.conversation?.id ?? (raw.id as number);
