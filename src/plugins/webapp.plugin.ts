@@ -86,8 +86,15 @@ const WEBAPP_HTML = `<!DOCTYPE html>
         var conversationId = params.get('conversation_id');
 
         // Auto-format Xetux ID: uppercase + insert dash after MX/VE
+        var xetuxHint = document.getElementById('xetux_id-error');
         document.getElementById('xetux_id').addEventListener('input', function() {
             var val = this.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+            // Check prefix: must start with MX or VE
+            if (val.length >= 2 && !(/^(MX|VE|M|V)/.test(val))) {
+                tg.showAlert('El Xetux ID debe comenzar con MX o VE');
+                this.value = '';
+                return;
+            }
             // Insert dash after MX or VE if followed by a digit
             if (/^(MX|VE)\\d/.test(val) && val.charAt(2) !== '-') {
                 val = val.slice(0, 2) + '-' + val.slice(2);
