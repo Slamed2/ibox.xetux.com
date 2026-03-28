@@ -71,6 +71,34 @@ class ChatwootService {
     return data;
   }
 
+  async getMessages(conversationId: number) {
+    const messages: any[] = [];
+    let before: number | undefined;
+
+    // Paginate through all messages
+    while (true) {
+      const params: Record<string, unknown> = {};
+      if (before) params.before = before;
+
+      const { data } = await this.client.get(`/conversations/${conversationId}/messages`, { params });
+      const payload = data.payload ?? [];
+      if (payload.length === 0) break;
+
+      messages.push(...payload);
+      before = payload[payload.length - 1]?.id;
+      if (payload.length < 20) break; // Less than a full page means we're done
+    }
+
+    return messages;
+  }
+
+  async updateConversationCustomAttributes(conversationId: number, customAttributes: Record<string, unknown>) {
+    const { data } = await this.client.patch(`/conversations/${conversationId}`, {
+      custom_attributes: customAttributes,
+    });
+    return data;
+  }
+
   async getAgent(agentId: number) {
     try {
       const { data } = await this.client.get('/agents');

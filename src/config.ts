@@ -15,4 +15,7 @@ export const config = cleanEnv(process.env, {
   CHATWOOT_BASE_URL: str(),
   CHATWOOT_API_TOKEN: str(),
   CHATWOOT_ACCOUNT_ID: num(),
+
+  // OpenAI
+  OPENAI_API_KEY: str(),
 });

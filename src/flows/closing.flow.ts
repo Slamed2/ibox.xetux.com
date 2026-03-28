@@ -1,4 +1,5 @@
 import { chatwootService } from '../services/chatwoot.service.js';
+import { summarizeConversation } from '../services/ai.service.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
 import { bot } from '../services/telegram.service.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
@@ -43,8 +44,24 @@ export async function handleConversationResolved(payload: ChatwootWebhookPayload
       // Add closing labels
       await chatwootService.addLabels(conversation.id, CLOSING_LABELS);
 
-      logger.info({ conversationId: conversation.id }, 'Conversation closed with farewell');
-      return { farewell: 'sent', labels: CLOSING_LABELS, telegramMessageId };
+      // Generate AI summary of the conversation
+      const messages = await chatwootService.getMessages(conversation.id);
+      const summary = await summarizeConversation(messages);
+
+      // Save summary as internal note
+      await chatwootService.sendMessage(conversation.id, {
+        content: `📋 **Informe IA**\n\n${summary}`,
+        private: true,
+        message_type: 'outgoing',
+      });
+
+      // Save summary in conversation custom_attributes
+      await chatwootService.updateConversationCustomAttributes(conversation.id, {
+        informe_ia: summary,
+      });
+
+      logger.info({ conversationId: conversation.id }, 'Conversation closed with farewell and AI summary');
+      return { farewell: 'sent', labels: CLOSING_LABELS, telegramMessageId, aiSummary: true };
     },
   );
 }
