@@ -222,7 +222,7 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
     const imgPath = path.resolve(__dirname, '../assets/xetux-id-help.png');
     if (fs.existsSync(imgPath)) {
       const img = fs.readFileSync(imgPath);
-      reply.type('image/png').send(img);
+      reply.type('image/jpeg').send(img);
     } else {
       reply.code(404).send('Image not found');
     }
