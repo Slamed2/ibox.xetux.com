@@ -86,43 +86,54 @@ class ChatwootService {
   }
 
   /**
-   * Search conversations by contact source_id (e.g. Telegram chat_id)
-   * Uses the conversations filter API
+   * Find a Chatwoot conversation by Telegram user ID.
+   * Searches open conversations matching social_telegram_user_id in sender attributes.
    */
-  async findConversationByContactSourceId(sourceId: string): Promise<number | null> {
+  async findConversationByTelegramUserId(telegramUserId: number): Promise<number | null> {
     try {
-      // Search for contact by identifier (Telegram chat_id)
-      const { data: searchResult } = await this.client.get(`/contacts/search`, {
-        params: { q: sourceId, include_contacts: true },
+      // Search open conversations (page by page if needed)
+      for (let page = 1; page <= 5; page++) {
+        const { data } = await this.client.get('/conversations', {
+          params: { status: 'open', page },
+        });
+
+        const conversations = data?.data?.payload ?? [];
+        if (conversations.length === 0) break;
+
+        for (const conv of conversations) {
+          const senderTgId = conv?.meta?.sender?.additional_attributes?.social_telegram_user_id;
+          if (senderTgId === telegramUserId) {
+            return conv.id;
+          }
+        }
+      }
+
+      // Also check pending conversations
+      const { data: pendingData } = await this.client.get('/conversations', {
+        params: { status: 'pending', page: 1 },
       });
+      const pendingConvs = pendingData?.data?.payload ?? [];
+      for (const conv of pendingConvs) {
+        const senderTgId = conv?.meta?.sender?.additional_attributes?.social_telegram_user_id;
+        if (senderTgId === telegramUserId) {
+          return conv.id;
+        }
+      }
 
-      const contacts = searchResult?.payload ?? [];
-      if (contacts.length === 0) return null;
-
-      const contactId = contacts[0].id;
-
-      // Get conversations for this contact
-      const { data: convResult } = await this.client.get(
-        `/contacts/${contactId}/conversations`,
-      );
-
-      const conversations = convResult?.payload ?? [];
-      // Return the most recent open conversation
-      const openConv = conversations.find((c: any) => c.status === 'open' || c.status === 'pending');
-      return openConv?.id ?? conversations[0]?.id ?? null;
+      return null;
     } catch (err) {
-      logger.error({ err, sourceId }, 'Failed to find conversation by source_id');
+      logger.error({ err, telegramUserId }, 'Failed to find conversation by Telegram user ID');
       return null;
     }
   }
 
   /**
-   * Send a message to a conversation, finding it by Telegram chat_id if needed
+   * Send a bot reply to Chatwoot, finding the conversation by Telegram user ID
    */
-  async sendMessageByTelegramChatId(chatId: number | string, content: string): Promise<boolean> {
-    const conversationId = await this.findConversationByContactSourceId(String(chatId));
+  async sendMessageByTelegramUserId(telegramUserId: number, content: string): Promise<boolean> {
+    const conversationId = await this.findConversationByTelegramUserId(telegramUserId);
     if (!conversationId) {
-      logger.warn({ chatId }, 'No Chatwoot conversation found for Telegram chat');
+      logger.warn({ telegramUserId }, 'No Chatwoot conversation found for Telegram user');
       return false;
     }
 
@@ -130,7 +141,7 @@ class ChatwootService {
       content,
       message_type: 'outgoing',
     });
-    logger.info({ chatId, conversationId }, 'Bot reply synced to Chatwoot');
+    logger.info({ telegramUserId, conversationId }, 'Bot reply synced to Chatwoot');
     return true;
   }
 }
