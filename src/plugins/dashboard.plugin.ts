@@ -50,7 +50,8 @@ export const dashboardPlugin: FastifyPluginAsync = async (fastify) => {
     await fastify.register(fastifyStatic, {
       root: publicDir,
       prefix: '/',
-      wildcard: false,
+      wildcard: true,
+      decorateReply: true,
     });
 
     // SPA fallback: serve index.html for all non-API, non-webhook routes
