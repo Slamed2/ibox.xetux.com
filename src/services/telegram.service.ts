@@ -416,6 +416,7 @@ export async function setupTelegramWebhook(webhookUrl: string) {
 
   await bot.api.setWebhook(webhookUrl, {
     secret_token: config.TELEGRAM_WEBHOOK_SECRET,
+    allowed_updates: ['message', 'edited_message', 'callback_query'],
   });
   logger.info({ webhookUrl }, 'Telegram webhook configured');
 }
