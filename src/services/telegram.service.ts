@@ -73,41 +73,25 @@ bot.command('start', async (ctx) => {
         const country = isMX ? 'Mexico' : 'Venezuela';
         const countryCode = isMX ? 'MX' : 'VE';
 
-        // Find conversation and contact in Chatwoot
+        // Always store pending — Chatwoot may create a NEW conversation
+        // that the greeting flow will handle
+        setPendingDeepLinkXetuxId(userId, xetuxId);
+
+        // Try to update existing contact if found
         const conversationId = await chatwootService.findConversationByTelegramUserId(userId);
         const conversation = conversationId ? await chatwootService.getConversation(conversationId) : null;
         const contactId = conversation?.contact?.id ?? conversation?.meta?.sender?.id;
 
         if (contactId) {
-          // Update contact with xetux_id and country
           await chatwootService.updateContact(contactId, {
             additional_attributes: { country, country_code: countryCode },
             custom_attributes: { xetux_id: xetuxId },
           });
-
-          // Add country label
-          if (conversationId) {
-            await chatwootService.addLabels(conversationId, [isMX ? 'mexico' : 'venezuela']);
-          }
-
-          // Enable department commands
           await enableUserCommands(userId);
-
-          // Send internal note
-          if (conversationId) {
-            await chatwootService.sendMessage(conversationId, {
-              content: `🔗 Xetux ID vinculado via deep link: ${xetuxId}`,
-              private: true,
-              message_type: 'outgoing',
-            });
-          }
-
           logger.info({ userId, xetuxId, contactId, conversationId }, 'Xetux ID updated via deep link');
           return { action: 'xetux_id_linked', xetuxId, contactId, conversationId };
         }
 
-        // No conversation yet — store xetux_id for when conversation_created fires
-        setPendingDeepLinkXetuxId(userId, xetuxId);
         logger.info({ userId, xetuxId }, 'Deep link xetux_id stored, waiting for conversation_created');
         return { action: 'deep_link_pending', xetuxId };
       }
