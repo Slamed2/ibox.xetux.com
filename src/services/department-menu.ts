@@ -10,54 +10,40 @@ export const TEAMS = {
   CONSULTORIA_MX: 8,
 } as const;
 
-// Button labels (exact text the user sends when tapping)
-export const BTN = {
-  CONSULTORIA: '💼 Consultoría',
-  SOPORTE: '🛠 Soporte',
-  VENTAS: '🛒 Ventas',
-  ADMINISTRACION: '📋 Administración',
-  MEXICO: '🇲🇽 México',
-  VENEZUELA: '🇻🇪 Venezuela',
-} as const;
-
-// Direct departments — no country needed
-export const DIRECT_DEPARTMENTS: Record<string, { teamId: number; label: string }> = {
-  [BTN.VENTAS]: { teamId: TEAMS.VENTAS, label: 'Ventas' },
-  [BTN.ADMINISTRACION]: { teamId: TEAMS.ADMINISTRACION, label: 'Administración' },
+// Command → department mapping for direct departments (no country needed)
+export const DIRECT_COMMANDS: Record<string, { teamId: number; label: string }> = {
+  ventas: { teamId: TEAMS.VENTAS, label: 'Ventas' },
+  administracion: { teamId: TEAMS.ADMINISTRACION, label: 'Administración' },
 };
 
-// Departments that need country selection
-export const NEEDS_COUNTRY = new Set<string>([BTN.CONSULTORIA, BTN.SOPORTE]);
-
-// Department + country → team mapping
-export const DEPT_COUNTRY_TEAMS: Record<string, Record<string, { teamId: number; label: string }>> = {
-  [BTN.CONSULTORIA]: {
-    [BTN.MEXICO]: { teamId: TEAMS.CONSULTORIA_MX, label: 'Consultoría México' },
-    [BTN.VENEZUELA]: { teamId: TEAMS.CONSULTORIA_VE, label: 'Consultoría Venezuela' },
+// Commands that need country selection
+export const COUNTRY_COMMANDS: Record<string, Record<string, { teamId: number; label: string }>> = {
+  consultoria: {
+    '🇲🇽 México': { teamId: TEAMS.CONSULTORIA_MX, label: 'Consultoría México' },
+    '🇻🇪 Venezuela': { teamId: TEAMS.CONSULTORIA_VE, label: 'Consultoría Venezuela' },
   },
-  [BTN.SOPORTE]: {
-    [BTN.MEXICO]: { teamId: TEAMS.SOPORTE_MX, label: 'Soporte México' },
-    [BTN.VENEZUELA]: { teamId: TEAMS.SOPORTE_VE, label: 'Soporte Venezuela' },
+  soporte: {
+    '🇲🇽 México': { teamId: TEAMS.SOPORTE_MX, label: 'Soporte México' },
+    '🇻🇪 Venezuela': { teamId: TEAMS.SOPORTE_VE, label: 'Soporte Venezuela' },
   },
 };
 
-// Persistent department keyboard (always visible)
-export const DEPARTMENT_KEYBOARD = new Keyboard()
-  .text(BTN.CONSULTORIA).text(BTN.SOPORTE).row()
-  .text(BTN.VENTAS).text(BTN.ADMINISTRACION)
-  .resized()
-  .persistent();
-
-// Country selection keyboard
+// Country selection keyboard (one-time, disappears after selection)
 export const COUNTRY_KEYBOARD = new Keyboard()
-  .text(BTN.MEXICO).text(BTN.VENEZUELA)
+  .text('🇲🇽 México').text('🇻🇪 Venezuela')
   .resized()
   .oneTime();
 
-// All button labels for quick lookup
-export const ALL_DEPT_BUTTONS = new Set<string>([BTN.CONSULTORIA, BTN.SOPORTE, BTN.VENTAS, BTN.ADMINISTRACION]);
-export const ALL_COUNTRY_BUTTONS = new Set<string>([BTN.MEXICO, BTN.VENEZUELA]);
+export const COUNTRY_BUTTONS = new Set<string>(['🇲🇽 México', '🇻🇪 Venezuela']);
+
+// Bot commands to register in Telegram menu
+export const BOT_COMMANDS = [
+  { command: 'consultoria', description: '💼 Chatear con Consultoría' },
+  { command: 'soporte', description: '🛠 Chatear con Soporte' },
+  { command: 'ventas', description: '🛒 Chatear con Ventas' },
+  { command: 'administracion', description: '📋 Chatear con Administración' },
+];
 
 // Text representation for Chatwoot sync
 export const MENU_TEXT =
-  '💼 Consultoría | 🛠 Soporte | 🛒 Ventas | 📋 Administración';
+  '💼 /consultoria | 🛠 /soporte | 🛒 /ventas | 📋 /administracion';
