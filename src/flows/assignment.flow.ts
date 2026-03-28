@@ -1,18 +1,9 @@
 import { chatwootService } from '../services/chatwoot.service.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
 import { bot, wasBotAssignment } from '../services/telegram.service.js';
-import { TEAMS, TEAM_LABELS } from '../services/department-menu.js';
+import { TEAM_LABELS, TEAM_NAMES } from '../services/department-menu.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { logger } from '../utils/logger.js';
-
-const TEAM_NAMES: Record<number, string> = {
-  [TEAMS.SOPORTE_MX]: 'Soporte México',
-  [TEAMS.SOPORTE_VE]: 'Soporte Venezuela',
-  [TEAMS.CONSULTORIA_VE]: 'Consultoría Venezuela',
-  [TEAMS.VENTAS]: 'Ventas',
-  [TEAMS.ADMINISTRACION]: 'Administración',
-  [TEAMS.CONSULTORIA_MX]: 'Consultoría México',
-};
 
 export async function handleConversationUpdated(payload: ChatwootWebhookPayload) {
   const conversation = payload.conversation;

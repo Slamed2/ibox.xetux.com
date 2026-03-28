@@ -5,7 +5,6 @@ import { chatwootService } from './chatwoot.service.js';
 import { withExecutionLog } from './execution-log.service.js';
 import { InlineKeyboard } from 'grammy';
 import {
-  DIRECT_COMMANDS,
   COUNTRY_COMMANDS,
   COUNTRY_KEYBOARD,
   COUNTRY_BUTTONS,
@@ -196,13 +195,7 @@ async function handleDepartmentCommand(ctx: any, command: string, displayName: s
       metadata: { command, username: ctx.from?.username ?? null },
     },
     async () => {
-      // Direct department — assign immediately
-      if (DIRECT_COMMANDS[command]) {
-        const { teamId, label } = DIRECT_COMMANDS[command];
-        return await assignTeamAndConfirm(ctx, userId, teamId, label);
-      }
-
-      // Department needs country selection
+      // All departments need country selection
       if (COUNTRY_COMMANDS[command]) {
         pendingDepartment.set(userId, command);
         await ctx.reply(`Has seleccionado ${displayName}.\n\n¿En qué país te encuentras?`, {

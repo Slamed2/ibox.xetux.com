@@ -371,8 +371,8 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
               .text('💼 Consultoría', `team:${country === 'mx' ? TEAMS.CONSULTORIA_MX : TEAMS.CONSULTORIA_VE}:Consultoría`)
               .text('🛠 Soporte', `team:${country === 'mx' ? TEAMS.SOPORTE_MX : TEAMS.SOPORTE_VE}:Soporte`)
               .row()
-              .text('🛒 Ventas', `team:${TEAMS.VENTAS}:Ventas`)
-              .text('📋 Administración', `team:${TEAMS.ADMINISTRACION}:Administración`);
+              .text('🛒 Ventas', `team:${country === 'mx' ? TEAMS.VENTAS_MX : TEAMS.VENTAS_VE}:Ventas`)
+              .text('📋 Administración', `team:${country === 'mx' ? TEAMS.ADMINISTRACION_MX : TEAMS.ADMINISTRACION_VE}:Administración`);
 
             const deptMsg = await bot.api.sendMessage(
               telegram_user.id,
