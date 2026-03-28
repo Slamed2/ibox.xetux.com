@@ -15,46 +15,67 @@ const WELCOME_MESSAGE_NO_XETUX_ID =
 const WELCOME_MESSAGE_WITH_XETUX_ID =
   '¡Hola! 👋 Gracias por contactarnos. En un momento un agente te atenderá.';
 
-// Mapeo de inbox_id a team_id para enrutamiento automatico
-const INBOX_TO_TEAM: Record<number, number> = {
-  // Configurar segun tu setup de Chatwoot
-  // Ejemplo: 1: 1, // inbox_id 1 -> team_id 1 (Soporte)
-};
+// Set to track conversations that already got a greeting (in-memory, resets on restart)
+const greetedConversations = new Set<number>();
 
-export async function handleConversationCreated(payload: ChatwootWebhookPayload) {
+/**
+ * Extract Telegram user ID from any Chatwoot AgentBot webhook payload.
+ * Tries multiple paths since the structure varies by event type.
+ */
+function extractTelegramUserId(payload: ChatwootWebhookPayload): number | undefined {
+  const conversation = payload.conversation as any;
+  if (!conversation) return undefined;
+
+  const raw = (
+    conversation.meta?.sender?.additional_attributes?.social_telegram_user_id ??
+    conversation.contact?.additional_attributes?.social_telegram_user_id ??
+    conversation.contact_inbox?.source_id ??
+    conversation.additional_attributes?.chat_id
+  );
+
+  return raw ? Number(raw) : undefined;
+}
+
+/**
+ * Extract xetux_id from contact custom_attributes.
+ */
+function extractXetuxId(payload: ChatwootWebhookPayload): string | undefined {
+  const conversation = payload.conversation as any;
+  if (!conversation) return undefined;
+
+  return (
+    conversation.meta?.sender?.custom_attributes?.xetux_id ??
+    conversation.contact?.custom_attributes?.xetux_id
+  ) as string | undefined;
+}
+
+/**
+ * Send the greeting message. Can be triggered from conversation_created
+ * OR from the first message_created of a new conversation.
+ */
+export async function sendGreeting(payload: ChatwootWebhookPayload) {
   const conversation = payload.conversation;
   if (!conversation) return;
 
-  // AgentBot payload: contact info is in conversation.meta.sender, NOT conversation.contact
-  const meta = (conversation as any)?.meta;
-  const sender = meta?.sender;
-  const contact = conversation.contact ?? sender;
+  // Don't greet the same conversation twice
+  if (greetedConversations.has(conversation.id)) {
+    logger.debug({ conversationId: conversation.id }, 'Greeting already sent, skipping');
+    return;
+  }
 
-  const xetuxId = (
-    sender?.custom_attributes?.xetux_id ??
-    contact?.custom_attributes?.xetux_id
-  ) as string | undefined;
+  const telegramUserIdNum = extractTelegramUserId(payload);
+  const xetuxId = extractXetuxId(payload);
 
-  // Telegram user ID: from sender.additional_attributes or contact_inbox.source_id
-  const telegramUserIdRaw = (
-    sender?.additional_attributes?.social_telegram_user_id ??
-    contact?.additional_attributes?.social_telegram_user_id ??
-    (conversation as any)?.contact_inbox?.source_id ??
-    (conversation as any)?.additional_attributes?.chat_id
-  ) as number | string | undefined;
-
-  const telegramUserIdNum = telegramUserIdRaw ? Number(telegramUserIdRaw) : undefined;
-
-  logger.info({ telegramUserIdNum, xetuxId, senderId: sender?.id, contactId: contact?.id }, 'Greeting flow: extracted user data');
+  logger.info({ telegramUserIdNum, xetuxId, conversationId: conversation.id }, 'Greeting flow: sending greeting');
 
   await withExecutionLog(
     {
-      eventType: 'chatwoot:conversation_created',
+      eventType: 'flow:greeting',
       source: 'chatwoot_webhook',
-      direction: 'inbound',
-      inputData: payload,
+      direction: 'outbound',
+      inputData: { conversationId: conversation.id, telegramUserIdNum, xetuxId },
       conversationId: String(conversation.id),
-      contactId: String(contact?.id),
+      contactId: String((conversation as any)?.meta?.sender?.id ?? ''),
       metadata: { xetuxId: xetuxId ?? null, telegramUserId: telegramUserIdNum ?? null },
     },
     async () => {
@@ -83,7 +104,6 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
           });
         } else {
           logger.warn({ conversationId: conversation.id }, 'No Telegram user ID found, sending via Chatwoot only');
-          // Not a Telegram conversation, send via Chatwoot only
           await chatwootService.sendMessage(conversation.id, {
             content: WELCOME_MESSAGE_NO_XETUX_ID + `\n\n🔗 ${WEBAPP_URL}`,
             message_type: 'outgoing',
@@ -114,14 +134,48 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
         messageSent = 'welcome_with_xetux_id';
       }
 
-      // Auto-assign team based on inbox
-      const teamId = INBOX_TO_TEAM[conversation.inbox_id];
-      if (teamId) {
-        await chatwootService.assignConversation(conversation.id, { team_id: teamId });
-        logger.info({ conversationId: conversation.id, teamId }, 'Auto-assigned team');
-      }
+      // Mark as greeted
+      greetedConversations.add(conversation.id);
 
-      return { greeting: messageSent, xetuxId: xetuxId ?? null, teamAssigned: teamId ?? null, telegramMessageId };
+      return { greeting: messageSent, xetuxId: xetuxId ?? null, telegramMessageId };
     },
   );
+}
+
+/**
+ * Handle conversation_created event (if Chatwoot sends it).
+ */
+export async function handleConversationCreated(payload: ChatwootWebhookPayload) {
+  await sendGreeting(payload);
+}
+
+/**
+ * Check if a message_created event is the first message and trigger greeting.
+ * Called from routing flow before routing logic.
+ */
+export async function maybeGreetOnFirstMessage(payload: ChatwootWebhookPayload): Promise<boolean> {
+  const conversation = payload.conversation as any;
+  const message = payload.message;
+  if (!conversation || !message) return false;
+
+  // Only greet on incoming messages from contacts
+  if (message.message_type !== 'incoming') return false;
+  if (message.sender?.type === 'agent_bot') return false;
+
+  // Already greeted this conversation
+  if (greetedConversations.has(conversation.id)) return false;
+
+  // Check if this is a new conversation: status is "pending" means no agent has replied yet
+  // Also check messages array — if it only has 1 message, it's likely the first one
+  const messages = conversation.messages;
+  const isPending = conversation.status === 'pending';
+  const isFirstMessage = Array.isArray(messages) && messages.length <= 1;
+
+  if (isPending || isFirstMessage) {
+    logger.info({ conversationId: conversation.id, status: conversation.status, messageCount: messages?.length }, 'First message detected, triggering greeting');
+    await sendGreeting(payload);
+    return true;
+  }
+
+  return false;
 }
