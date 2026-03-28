@@ -215,7 +215,9 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
           }
 
           // Derive country from xetux_id prefix
-          const pais = xetux_id.toUpperCase().startsWith('MX') ? 'México' : 'Venezuela';
+          const isMX = xetux_id.toUpperCase().startsWith('MX');
+          const country = isMX ? 'Mexico' : 'Venezuela';
+          const countryCode = isMX ? 'MX' : 'VE';
 
           // Update Chatwoot contact — if email/phone conflict, still sync xetux_id + country
           try {
@@ -223,14 +225,14 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
               name: nombre,
               email,
               phone_number: telefono,
-              location: pais,
+              additional_attributes: { country, country_code: countryCode },
               custom_attributes: { xetux_id },
             });
           } catch (updateErr) {
             logger.warn({ err: updateErr, contactId: contact_id }, 'Full contact update failed, syncing xetux_id only');
             await chatwootService.updateContact(contactIdNum, {
               name: nombre,
-              location: pais,
+              additional_attributes: { country, country_code: countryCode },
               custom_attributes: { xetux_id },
             });
           }
