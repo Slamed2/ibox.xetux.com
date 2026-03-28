@@ -82,5 +82,6 @@ export interface ChatwootUpdateContactPayload {
   name?: string;
   email?: string;
   phone_number?: string;
+  location?: string;
   custom_attributes?: Record<string, unknown>;
 }

@@ -223,13 +223,15 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
               name: nombre,
               email,
               phone_number: telefono,
-              custom_attributes: { xetux_id, pais },
+              location: pais,
+              custom_attributes: { xetux_id },
             });
           } catch (updateErr) {
             logger.warn({ err: updateErr, contactId: contact_id }, 'Full contact update failed, syncing xetux_id only');
             await chatwootService.updateContact(contactIdNum, {
               name: nombre,
-              custom_attributes: { xetux_id, pais },
+              location: pais,
+              custom_attributes: { xetux_id },
             });
           }
 
