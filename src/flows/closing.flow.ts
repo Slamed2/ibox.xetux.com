@@ -22,7 +22,7 @@ export async function handleConversationResolved(payload: ChatwootWebhookPayload
       contactId: String(conversation.contact?.id),
     },
     async () => {
-      const farewellMessage = `Conversación #${conversation.id} cerrada.\n¡Gracias por contactarnos! Si necesitas algo más, no dudes en escribirnos. 😊`;
+      const farewellMessage = `Su conversación #${conversation.id} ha sido procesada y solucionada. Estamos atentos a cualquier duda o caso pendiente que pueda tener para ser atendido por nuestro departamento.\n\nSu opinión es importante para nosotros, por esta razón nos gustaría que nos apoyara llenando esta breve encuesta https://forms.gle/8Tv3jKP5WTziFPqD8\n\nGracias por comunicarse con Xetux.`;
 
       // Send farewell via Telegram
       const telegramUserId = conversation.contact?.additional_attributes?.social_telegram_user_id as number | undefined;
