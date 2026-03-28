@@ -127,7 +127,8 @@ const WEBAPP_HTML = `<!DOCTYPE html>
                 conversation_id: conversationId,
                 telegram_user: tg.initDataUnsafe.user || null
             };
-            fetch('/api/webapp/register', {
+            var apiUrl = window.location.origin + '/api/webapp/register';
+            fetch(apiUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
@@ -138,12 +139,14 @@ const WEBAPP_HTML = `<!DOCTYPE html>
                     tg.showAlert('Sesión iniciada correctamente. ¡Bienvenido a Xetux!');
                     setTimeout(function() { tg.close(); }, 1500);
                 } else {
-                    tg.showAlert('Error al enviar. Intenta de nuevo.');
+                    res.text().then(function(t) {
+                        tg.showAlert('Error: ' + t);
+                    });
                 }
             })
-            .catch(function() {
+            .catch(function(err) {
                 tg.MainButton.hideProgress();
-                tg.showAlert('Error de conexión. Intenta de nuevo.');
+                tg.showAlert('Error de conexión: ' + err.message);
             });
         });
     </script>
@@ -172,22 +175,19 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
       },
       async () => {
         const contactIdNum = parseInt(contact_id, 10);
+        const conversationIdNum = parseInt(conversation_id, 10);
 
-        if (!contactIdNum) {
-          reply.code(400);
-          return { error: 'Invalid contact_id' };
+        // Update Chatwoot contact if we have a valid contact_id
+        if (contactIdNum) {
+          await chatwootService.updateContact(contactIdNum, {
+            name: nombre,
+            email,
+            phone_number: telefono,
+            custom_attributes: { xetux_id },
+          });
         }
 
-        // Update Chatwoot contact with the form data
-        await chatwootService.updateContact(contactIdNum, {
-          name: nombre,
-          email,
-          phone_number: telefono,
-          custom_attributes: { xetux_id },
-        });
-
         // Send confirmation message in the conversation
-        const conversationIdNum = parseInt(conversation_id, 10);
         if (conversationIdNum) {
           await chatwootService.sendMessage(conversationIdNum, {
             content: `✅ Registro completado:\n• Nombre: ${nombre}\n• Teléfono: ${telefono}\n• Email: ${email}\n• Xetux ID: ${xetux_id}`,
@@ -195,7 +195,7 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
           });
         }
 
-        logger.info({ contactId: contact_id, xetux_id }, 'WebApp registration completed');
+        logger.info({ contactId: contact_id, conversationId: conversation_id, xetux_id }, 'WebApp registration completed');
         return { success: true };
       },
     );
