@@ -6,8 +6,8 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
-      '/api': 'http://localhost:3000',
-      '/webhook': 'http://localhost:3000',
+      '/api': 'https://xetux2-inbox.zbawxh.easypanel.host',
+      '/webhook': 'https://xetux2-inbox.zbawxh.easypanel.host',
     },
   },
   build: {

@@ -11,11 +11,11 @@ import { StatusBadge } from './StatusBadge.js';
 const columnHelper = createColumnHelper<ExecutionLog>();
 
 const columns = [
-  columnHelper.accessor('created_at', {
+  columnHelper.accessor('createdAt', {
     header: 'Time',
     cell: (info) => format(new Date(info.getValue()), 'dd/MM HH:mm:ss'),
   }),
-  columnHelper.accessor('event_type', {
+  columnHelper.accessor('eventType', {
     header: 'Event',
     cell: (info) => (
       <span className="font-mono text-xs">{info.getValue()}</span>
@@ -39,14 +39,14 @@ const columns = [
     header: 'Status',
     cell: (info) => <StatusBadge status={info.getValue() as 'pending' | 'success' | 'error'} />,
   }),
-  columnHelper.accessor('duration_ms', {
+  columnHelper.accessor('durationMs', {
     header: 'Duration',
     cell: (info) => {
       const val = info.getValue();
       return val != null ? `${val}ms` : '-';
     },
   }),
-  columnHelper.accessor('conversation_id', {
+  columnHelper.accessor('conversationId', {
     header: 'Conv. ID',
     cell: (info) => (
       <span className="font-mono text-xs">{info.getValue() ?? '-'}</span>
@@ -111,7 +111,6 @@ export function LogTable({ data, onRowClick, page, totalPages, total, onPageChan
         </table>
       </div>
 
-      {/* Pagination */}
       <div className="flex items-center justify-between px-3 py-3 border-t text-sm text-gray-600">
         <span>{total} total executions</span>
         <div className="flex items-center gap-2">

@@ -15,7 +15,7 @@ export function LogDetail({ log, onClose }: LogDetailProps) {
         <div className="flex items-center justify-between p-4 border-b">
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-semibold">Execution Detail</h2>
-            <StatusBadge status={log.status as 'pending' | 'success' | 'error'} />
+            <StatusBadge status={log.status} />
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
         </div>
@@ -24,7 +24,7 @@ export function LogDetail({ log, onClose }: LogDetailProps) {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
             <div>
               <span className="text-gray-500 block">Event Type</span>
-              <span className="font-mono">{log.event_type}</span>
+              <span className="font-mono">{log.eventType}</span>
             </div>
             <div>
               <span className="text-gray-500 block">Source</span>
@@ -36,19 +36,19 @@ export function LogDetail({ log, onClose }: LogDetailProps) {
             </div>
             <div>
               <span className="text-gray-500 block">Duration</span>
-              <span className="font-mono">{log.duration_ms != null ? `${log.duration_ms}ms` : '-'}</span>
+              <span className="font-mono">{log.durationMs != null ? `${log.durationMs}ms` : '-'}</span>
             </div>
             <div>
               <span className="text-gray-500 block">Conversation ID</span>
-              <span className="font-mono">{log.conversation_id ?? '-'}</span>
+              <span className="font-mono">{log.conversationId ?? '-'}</span>
             </div>
             <div>
               <span className="text-gray-500 block">Contact ID</span>
-              <span className="font-mono">{log.contact_id ?? '-'}</span>
+              <span className="font-mono">{log.contactId ?? '-'}</span>
             </div>
             <div>
               <span className="text-gray-500 block">Created At</span>
-              <span className="font-mono">{new Date(log.created_at).toLocaleString()}</span>
+              <span className="font-mono">{new Date(log.createdAt).toLocaleString()}</span>
             </div>
             <div>
               <span className="text-gray-500 block">ID</span>
@@ -56,25 +56,25 @@ export function LogDetail({ log, onClose }: LogDetailProps) {
             </div>
           </div>
 
-          {log.error_message && (
+          {log.errorMessage && (
             <div className="bg-red-50 border border-red-200 rounded p-3">
               <span className="text-red-700 font-medium block mb-1">Error</span>
-              <pre className="text-red-600 text-sm whitespace-pre-wrap">{log.error_message}</pre>
+              <pre className="text-red-600 text-sm whitespace-pre-wrap">{log.errorMessage}</pre>
             </div>
           )}
 
           <div>
             <h3 className="text-sm font-medium text-gray-500 mb-2">Input Data</h3>
             <div className="bg-gray-50 rounded p-3 overflow-x-auto">
-              <JsonView data={log.input_data as object} style={defaultStyles} />
+              <JsonView data={log.inputData as object} style={defaultStyles} />
             </div>
           </div>
 
-          {log.output_data != null && (
+          {log.outputData != null && (
             <div>
               <h3 className="text-sm font-medium text-gray-500 mb-2">Output Data</h3>
               <div className="bg-gray-50 rounded p-3 overflow-x-auto">
-                <JsonView data={log.output_data as object} style={defaultStyles} />
+                <JsonView data={log.outputData as object} style={defaultStyles} />
               </div>
             </div>
           )}

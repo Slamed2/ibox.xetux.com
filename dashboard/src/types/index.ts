@@ -1,18 +1,18 @@
 export interface ExecutionLog {
   id: string;
-  event_type: string;
+  eventType: string;
   source: string;
   direction: 'inbound' | 'outbound';
   status: 'pending' | 'success' | 'error';
-  input_data: unknown;
-  output_data: unknown | null;
-  error_message: string | null;
-  duration_ms: number | null;
-  conversation_id: string | null;
-  contact_id: string | null;
+  inputData: unknown;
+  outputData: unknown | null;
+  errorMessage: string | null;
+  durationMs: number | null;
+  conversationId: string | null;
+  contactId: string | null;
   metadata: Record<string, unknown> | null;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface LogsResponse {
