@@ -1,6 +1,6 @@
 import { chatwootService } from '../services/chatwoot.service.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
-import { bot } from '../services/telegram.service.js';
+import { bot, enableUserCommands } from '../services/telegram.service.js';
 import { MENU_TEXT, TEAMS } from '../services/department-menu.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { logger } from '../utils/logger.js';
@@ -40,10 +40,13 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
     async () => {
       const webappUrl = `${WEBAPP_BASE_URL}?contact_id=${contact?.id ?? ''}&conversation_id=${conversation.id}`;
 
-      // Add country label if we know it from xetux_id
+      // Add country label and enable commands if we know the user
       if (xetuxId) {
         const countryLabel = xetuxId.toUpperCase().startsWith('MX') ? 'mexico' : 'venezuela';
         await chatwootService.addLabels(conversation.id, [countryLabel]);
+        if (telegramUserId) {
+          await enableUserCommands(telegramUserId);
+        }
       }
 
       if (!telegramUserId) {

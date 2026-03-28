@@ -3,7 +3,7 @@ import { AxiosError } from 'axios';
 import { InlineKeyboard } from 'grammy';
 import { chatwootService } from '../services/chatwoot.service.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
-import { bot } from '../services/telegram.service.js';
+import { bot, enableUserCommands } from '../services/telegram.service.js';
 import { TEAMS } from '../services/department-menu.js';
 import { logger } from '../utils/logger.js';
 
@@ -246,6 +246,11 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
             private: true,
             message_type: 'outgoing',
           });
+
+          // Enable department commands in hamburger menu for this user
+          if (telegram_user?.id) {
+            await enableUserCommands(telegram_user.id);
+          }
 
           // Send department selection menu via Telegram
           if (telegram_user?.id) {

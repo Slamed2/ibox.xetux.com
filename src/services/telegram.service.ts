@@ -244,14 +244,25 @@ bot.catch((err) => {
 });
 
 export async function setupTelegramWebhook(webhookUrl: string) {
-  // Register bot commands (visible in hamburger menu)
-  await bot.api.setMyCommands(BOT_COMMANDS);
-  logger.info('Bot commands registered in Telegram menu');
+  // Default commands (for users who haven't registered yet)
+  await bot.api.setMyCommands([], { scope: { type: 'default' } });
+  logger.info('Default bot commands cleared (no menu for unregistered users)');
 
   await bot.api.setWebhook(webhookUrl, {
     secret_token: config.TELEGRAM_WEBHOOK_SECRET,
   });
   logger.info({ webhookUrl }, 'Telegram webhook configured');
+}
+
+/**
+ * Enable department commands in the hamburger menu for a specific user.
+ * Call this after registration.
+ */
+export async function enableUserCommands(telegramUserId: number) {
+  await bot.api.setMyCommands(BOT_COMMANDS, {
+    scope: { type: 'chat', chat_id: telegramUserId },
+  });
+  logger.info({ telegramUserId }, 'Department commands enabled for user');
 }
 
 /**
