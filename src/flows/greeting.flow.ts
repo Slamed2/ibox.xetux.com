@@ -25,20 +25,27 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
   const conversation = payload.conversation;
   if (!conversation) return;
 
-  const contact = conversation.contact;
-  const xetuxId = contact?.custom_attributes?.xetux_id as string | undefined;
+  // AgentBot payload: contact info is in conversation.meta.sender, NOT conversation.contact
+  const meta = (conversation as any)?.meta;
+  const sender = meta?.sender;
+  const contact = conversation.contact ?? sender;
 
-  // Try multiple paths to find the Telegram user ID
-  const telegramUserId = (
+  const xetuxId = (
+    sender?.custom_attributes?.xetux_id ??
+    contact?.custom_attributes?.xetux_id
+  ) as string | undefined;
+
+  // Telegram user ID: from sender.additional_attributes or contact_inbox.source_id
+  const telegramUserIdRaw = (
+    sender?.additional_attributes?.social_telegram_user_id ??
     contact?.additional_attributes?.social_telegram_user_id ??
-    (conversation as any)?.meta?.sender?.additional_attributes?.social_telegram_user_id ??
-    (payload as any)?.sender?.additional_attributes?.social_telegram_user_id ??
-    contact?.identifier
+    (conversation as any)?.contact_inbox?.source_id ??
+    (conversation as any)?.additional_attributes?.chat_id
   ) as number | string | undefined;
 
-  const telegramUserIdNum = telegramUserId ? Number(telegramUserId) : undefined;
+  const telegramUserIdNum = telegramUserIdRaw ? Number(telegramUserIdRaw) : undefined;
 
-  logger.info({ telegramUserId, telegramUserIdNum, xetuxId, contactId: contact?.id, identifier: contact?.identifier }, 'Greeting flow: extracted user data');
+  logger.info({ telegramUserIdNum, xetuxId, senderId: sender?.id, contactId: contact?.id }, 'Greeting flow: extracted user data');
 
   await withExecutionLog(
     {
