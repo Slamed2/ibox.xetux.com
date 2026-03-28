@@ -201,9 +201,10 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
             custom_attributes: { xetux_id },
           });
 
-          // Send confirmation message in the conversation
+          // Send registration details as internal note in Chatwoot
           await chatwootService.sendMessage(conversationIdNum, {
             content: `✅ Registro completado:\n• Nombre: ${nombre}\n• Teléfono: ${telefono}\n• Email: ${email}\n• Xetux ID: ${xetux_id}`,
+            private: true,
             message_type: 'outgoing',
           });
 
