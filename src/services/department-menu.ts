@@ -46,7 +46,12 @@ export const COUNTRY_KEYBOARD = new Keyboard()
 
 export const COUNTRY_BUTTONS = new Set<string>(['🇲🇽 México', '🇻🇪 Venezuela']);
 
-// Bot commands to register in Telegram menu
+// Bot commands for unregistered users
+export const GUEST_COMMANDS = [
+  { command: 'registro', description: '🔑 Iniciar sesión' },
+];
+
+// Bot commands for registered users
 export const BOT_COMMANDS = [
   { command: 'consultoria', description: '💼 Chatear con Consultoría' },
   { command: 'soporte', description: '🛠 Chatear con Soporte' },

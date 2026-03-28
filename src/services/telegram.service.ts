@@ -3,12 +3,14 @@ import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { chatwootService } from './chatwoot.service.js';
 import { withExecutionLog } from './execution-log.service.js';
+import { InlineKeyboard } from 'grammy';
 import {
   DIRECT_COMMANDS,
   COUNTRY_COMMANDS,
   COUNTRY_KEYBOARD,
   COUNTRY_BUTTONS,
   BOT_COMMANDS,
+  GUEST_COMMANDS,
   TEAM_LABELS,
 } from './department-menu.js';
 
@@ -45,6 +47,35 @@ bot.command('start', async (ctx) => {
     },
     async () => {
       return { handled: 'deferred_to_chatwoot_conversation_created' };
+    },
+  );
+});
+
+// /registro command — send login button
+const WEBAPP_BASE_URL = (process.env.WEBHOOK_BASE_URL ?? 'https://xetux2-inbox.zbawxh.easypanel.host') + '/webapp';
+
+bot.command('registro', async (ctx) => {
+  const userId = ctx.from?.id;
+  await withExecutionLog(
+    {
+      eventType: 'telegram:command_registro',
+      source: 'telegram_webhook',
+      direction: 'inbound',
+      inputData: { chatId: ctx.chat.id, from: ctx.from },
+      contactId: String(userId),
+      metadata: { username: ctx.from?.username ?? null },
+    },
+    async () => {
+      // Find conversation and contact in Chatwoot
+      const conversationId = await chatwootService.findConversationByTelegramUserId(userId!);
+      const conversation = conversationId ? await chatwootService.getConversation(conversationId) : null;
+      const contactId = conversation?.contact?.id ?? conversation?.meta?.sender?.id ?? '';
+
+      const webappUrl = `${WEBAPP_BASE_URL}?contact_id=${contactId}&conversation_id=${conversationId ?? ''}`;
+      const keyboard = new InlineKeyboard().webApp('🔑 Iniciar sesión', webappUrl);
+
+      await ctx.reply('Toca el botón para iniciar sesión:', { reply_markup: keyboard });
+      return { action: 'registro_button_sent', conversationId, contactId };
     },
   );
 });
@@ -245,8 +276,8 @@ bot.catch((err) => {
 
 export async function setupTelegramWebhook(webhookUrl: string) {
   // Default commands (for users who haven't registered yet)
-  await bot.api.setMyCommands([], { scope: { type: 'default' } });
-  logger.info('Default bot commands cleared (no menu for unregistered users)');
+  await bot.api.setMyCommands(GUEST_COMMANDS, { scope: { type: 'default' } });
+  logger.info('Default bot commands set to guest menu (registro only)');
 
   await bot.api.setWebhook(webhookUrl, {
     secret_token: config.TELEGRAM_WEBHOOK_SECRET,
