@@ -6,7 +6,7 @@ import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { logger } from '../utils/logger.js';
 import { InlineKeyboard } from 'grammy';
 
-const WEBAPP_BASE_URL = 'https://xetux2-webapp.zbawxh.easypanel.host/';
+const WEBAPP_BASE_URL = (process.env.WEBHOOK_BASE_URL ?? 'https://xetux2-inbox.zbawxh.easypanel.host') + '/webapp';
 
 const WELCOME_NO_XETUX =
   '¡Bienvenido a Xetux! 🚀\n\n' +

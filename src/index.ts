@@ -9,6 +9,7 @@ import { healthPlugin } from './plugins/health.plugin.js';
 import { chatwootPlugin } from './plugins/chatwoot.plugin.js';
 import { telegramPlugin } from './plugins/telegram.plugin.js';
 import { dashboardPlugin } from './plugins/dashboard.plugin.js';
+import { webappPlugin } from './plugins/webapp.plugin.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -28,6 +29,7 @@ const app = Fastify({ logger: false });
 await app.register(healthPlugin);
 await app.register(chatwootPlugin, { prefix: '/webhook' });
 await app.register(telegramPlugin, { prefix: '/webhook' });
+await app.register(webappPlugin);
 await app.register(dashboardPlugin);
 
 // Graceful shutdown
