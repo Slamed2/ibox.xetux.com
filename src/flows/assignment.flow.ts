@@ -95,9 +95,11 @@ async function handleAssigneeChange(conversation: any, telegramUserId: number | 
       metadata: { assigneeId },
     },
     async () => {
-      // Get agent info from Chatwoot
-      const agent = await chatwootService.getAgent(assigneeId);
-      const agentName = agent?.name ?? 'Un agente';
+      // Get agent name: try from payload meta first, then API
+      const metaAssignee = (payload as any).meta?.assignee;
+      const agentName = metaAssignee?.name
+        ?? (await chatwootService.getAgent(assigneeId))?.name
+        ?? 'Un agente';
       const teamId = conversation.team_id as number | undefined;
       const teamName = teamId ? (TEAM_NAMES[teamId] ?? '') : '';
       const areaText = teamName ? ` del área de *${teamName}*` : '';

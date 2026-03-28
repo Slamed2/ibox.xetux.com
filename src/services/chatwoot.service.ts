@@ -73,8 +73,9 @@ class ChatwootService {
 
   async getAgent(agentId: number) {
     try {
-      const { data } = await this.client.get(`/agents/${agentId}`);
-      return data;
+      const { data } = await this.client.get('/agents');
+      const agents = Array.isArray(data) ? data : data.payload ?? [];
+      return agents.find((a: any) => a.id === agentId) ?? null;
     } catch {
       logger.warn({ agentId }, 'Could not fetch agent info');
       return null;
