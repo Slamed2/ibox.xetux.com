@@ -212,12 +212,12 @@ async function handleDepartmentCommand(ctx: any, command: string, displayName: s
         }
       }
 
-      // No xetux_id — fallback to country selection keyboard
-      pendingDepartment.set(userId, command);
-      await ctx.reply(`Has seleccionado ${displayName}.\n\n¿En qué país te encuentras?`, {
-        reply_markup: COUNTRY_KEYBOARD,
-      });
-      return { action: 'country_menu_shown', department: command };
+      // No xetux_id — show login button
+      const contactId = conversation?.contact?.id ?? conversation?.meta?.sender?.id ?? '';
+      const webappUrl = `${WEBAPP_BASE_URL}?contact_id=${contactId}&conversation_id=${conversationId ?? ''}`;
+      const keyboard = new InlineKeyboard().webApp('🔑 Iniciar sesión', webappUrl);
+      await ctx.reply('Para usar los departamentos primero debes iniciar sesión.', { reply_markup: keyboard });
+      return { action: 'login_required', department: command };
     },
   );
 }
