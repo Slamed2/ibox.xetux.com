@@ -3,6 +3,12 @@ import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { chatwootService } from './chatwoot.service.js';
 import { withExecutionLog } from './execution-log.service.js';
+import {
+  DIRECT_DEPARTMENTS,
+  COUNTRY_DEPARTMENTS,
+  DEPT_NAMES,
+  countryKeyboard,
+} from './department-menu.js';
 
 export const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 
@@ -18,11 +24,91 @@ bot.command('start', async (ctx) => {
       metadata: { chatType: ctx.chat.type, username: ctx.from?.username ?? null },
     },
     async () => {
-      // Don't reply here — the greeting.flow.ts handles it when Chatwoot creates the conversation
       return { handled: 'deferred_to_chatwoot_conversation_created' };
     },
   );
 });
+
+// Handle department menu callback queries
+bot.on('callback_query:data', async (ctx) => {
+  const data = ctx.callbackQuery.data;
+  const userId = ctx.from.id;
+
+  await withExecutionLog(
+    {
+      eventType: 'telegram:callback_query',
+      source: 'telegram_webhook',
+      direction: 'inbound',
+      inputData: { userId, data, messageId: ctx.callbackQuery.message?.message_id },
+      contactId: String(userId),
+      metadata: { callbackData: data, username: ctx.from.username ?? null },
+    },
+    async () => {
+      // Direct department (Ventas, Administración) — assign team immediately
+      if (DIRECT_DEPARTMENTS[data]) {
+        const { teamId, label } = DIRECT_DEPARTMENTS[data];
+        return await assignTeamAndConfirm(ctx, userId, teamId, label);
+      }
+
+      // Department that needs country selection (Consultoría, Soporte)
+      if (COUNTRY_DEPARTMENTS[data]) {
+        const deptName = DEPT_NAMES[data] ?? data;
+        await ctx.editMessageText(
+          `Has seleccionado ${deptName}.\n\n¿En qué país te encuentras?`,
+          { reply_markup: countryKeyboard(data) },
+        );
+        await ctx.answerCallbackQuery();
+        return { action: 'country_menu_shown', department: data };
+      }
+
+      // Country selection (e.g., "dept:soporte|country:mx")
+      if (data.includes('|country:')) {
+        const [dept, country] = data.split('|');
+        const countryMap = COUNTRY_DEPARTMENTS[dept];
+        if (countryMap?.[country]) {
+          const { teamId, label } = countryMap[country];
+          return await assignTeamAndConfirm(ctx, userId, teamId, label);
+        }
+      }
+
+      await ctx.answerCallbackQuery({ text: 'Opción no reconocida' });
+      return { action: 'unknown_callback', data };
+    },
+  );
+});
+
+/**
+ * Assign team in Chatwoot and send confirmation to user.
+ */
+async function assignTeamAndConfirm(
+  ctx: any,
+  telegramUserId: number,
+  teamId: number,
+  teamLabel: string,
+) {
+  // Find conversation in Chatwoot
+  const conversationId = await chatwootService.findConversationByTelegramUserId(telegramUserId);
+
+  if (conversationId) {
+    await chatwootService.assignConversation(conversationId, { team_id: teamId });
+
+    // Sync selection to Chatwoot
+    const selectionText = `📌 Departamento seleccionado: ${teamLabel}`;
+    await chatwootService.sendMessage(conversationId, {
+      content: selectionText,
+      message_type: 'outgoing',
+    });
+  } else {
+    logger.warn({ telegramUserId }, 'No Chatwoot conversation found for team assignment');
+  }
+
+  // Update Telegram message with confirmation
+  const confirmText = `✅ Tu conversación fue asignada a **${teamLabel}**.\n\nUn agente te atenderá pronto.`;
+  await ctx.editMessageText(confirmText, { parse_mode: 'Markdown' });
+  await ctx.answerCallbackQuery({ text: `Asignado a ${teamLabel}` });
+
+  return { action: 'team_assigned', teamId, teamLabel, conversationId };
+}
 
 // Log all other messages
 bot.on('message', async (ctx) => {
