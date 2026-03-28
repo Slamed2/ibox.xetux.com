@@ -3,6 +3,7 @@ import { handleConversationCreated } from '../flows/greeting.flow.js';
 import { handleMessageCreated } from '../flows/routing.flow.js';
 import { handleConversationResolved } from '../flows/closing.flow.js';
 import { handleConversationUpdated } from '../flows/assignment.flow.js';
+import { handleMessageUpdated } from '../flows/message-update.flow.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { logger } from '../utils/logger.js';
@@ -106,6 +107,10 @@ export const chatwootPlugin: FastifyPluginAsync = async (fastify) => {
           case 'conversation_updated':
             await handleConversationUpdated(payload);
             return { action: 'assignment_flow' };
+
+          case 'message_updated':
+            await handleMessageUpdated(raw);
+            return { action: 'message_updated_flow' };
 
           default:
             return { action: 'unhandled', event };
