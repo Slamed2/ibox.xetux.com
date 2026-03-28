@@ -231,6 +231,35 @@ bot.on('callback_query:data', async (ctx) => {
   await ctx.answerCallbackQuery();
 });
 
+// Handle edited messages — sync edits to Chatwoot
+bot.on('edited_message:text', async (ctx) => {
+  const userId = ctx.from?.id;
+  const editedMsg = ctx.editedMessage;
+
+  await withExecutionLog(
+    {
+      eventType: 'telegram:message_edited',
+      source: 'telegram_webhook',
+      direction: 'inbound',
+      inputData: { userId, messageId: editedMsg.message_id, text: editedMsg.text },
+      contactId: String(userId),
+      metadata: { username: ctx.from?.username ?? null },
+    },
+    async () => {
+      const conversationId = await chatwootService.findConversationByTelegramUserId(userId!);
+      if (!conversationId) return { action: 'no_conversation' };
+
+      const chatwootMsg = await chatwootService.findMessageBySourceId(conversationId, String(editedMsg.message_id));
+      if (chatwootMsg) {
+        await chatwootService.updateMessage(conversationId, chatwootMsg.id, editedMsg.text ?? '');
+        return { action: 'message_updated', chatwootMessageId: chatwootMsg.id };
+      }
+
+      return { action: 'message_not_found' };
+    },
+  );
+});
+
 // Handle non-text messages
 bot.on('message', async (ctx) => {
   await withExecutionLog(

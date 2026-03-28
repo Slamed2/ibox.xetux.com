@@ -31,6 +31,20 @@ class ChatwootService {
     return data;
   }
 
+  async updateMessage(conversationId: number, messageId: number, content: string) {
+    logger.debug({ conversationId, messageId }, 'Updating message in Chatwoot');
+    const { data } = await this.client.patch(
+      `/conversations/${conversationId}/messages/${messageId}`,
+      { content },
+    );
+    return data;
+  }
+
+  async findMessageBySourceId(conversationId: number, sourceId: string) {
+    const messages = await this.getMessages(conversationId);
+    return messages.find((m: any) => String(m.source_id) === sourceId) ?? null;
+  }
+
   async assignConversation(conversationId: number, payload: ChatwootAssignPayload) {
     logger.debug({ conversationId, ...payload }, 'Assigning conversation');
     const { data } = await this.client.post(
