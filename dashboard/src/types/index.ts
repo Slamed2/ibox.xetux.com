@@ -33,6 +33,9 @@ export interface LogStats {
 export interface LogFilters {
   eventType?: string;
   status?: string;
+  direction?: string;
+  search?: string;
+  conversationId?: string;
   dateFrom?: string;
   dateTo?: string;
   page?: number;

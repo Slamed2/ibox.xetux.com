@@ -1,6 +1,6 @@
 import { db } from '../db/connection.js';
 import { executionLogs } from '../db/schema.js';
-import { eq, desc, and, gte, lte, sql, count, avg } from 'drizzle-orm';
+import { eq, desc, and, gte, lte, sql, count, avg, or, ilike } from 'drizzle-orm';
 import type { CreateExecutionLog, ExecutionLogResult, LogFilters, LogStats } from '../types/execution-log.types.js';
 import { logger } from '../utils/logger.js';
 
@@ -68,6 +68,23 @@ export async function queryLogs(filters: LogFilters) {
   }
   if (filters.status) {
     conditions.push(eq(executionLogs.status, filters.status));
+  }
+  if (filters.direction) {
+    conditions.push(eq(executionLogs.direction, filters.direction));
+  }
+  if (filters.conversationId) {
+    conditions.push(eq(executionLogs.conversationId, filters.conversationId));
+  }
+  if (filters.search) {
+    const term = `%${filters.search}%`;
+    conditions.push(
+      or(
+        sql`${executionLogs.inputData}::text ILIKE ${term}`,
+        sql`${executionLogs.outputData}::text ILIKE ${term}`,
+        ilike(executionLogs.eventType, term),
+        sql`${executionLogs.metadata}::text ILIKE ${term}`,
+      )!,
+    );
   }
   if (filters.dateFrom) {
     conditions.push(gte(executionLogs.createdAt, new Date(filters.dateFrom)));

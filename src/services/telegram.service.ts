@@ -65,8 +65,9 @@ bot.command('start', async (ctx) => {
       metadata: { chatType: ctx.chat.type, username: ctx.from?.username ?? null },
     },
     async () => {
-      // Check for deep link: /start XETUXID--VE-12345 or XETUXID_VE-12345
-      const match = text.match(/XETUXID(?:--|_)([A-Za-z0-9-]+)/);
+      // Check for deep link: /start XETUXID-MX12345 or XETUXID--VE-12345 or XETUXID_VE-12345
+      // Extract the xetux_id part: everything after XETUXID followed by separator(s)
+      const match = text.match(/XETUXID[-_]+([A-Za-z0-9-]+)/);
       if (match && userId) {
         const xetuxId = match[1].toUpperCase();
         const isMX = xetuxId.startsWith('MX');
@@ -88,6 +89,17 @@ bot.command('start', async (ctx) => {
             custom_attributes: { xetux_id: xetuxId },
           });
           await enableUserCommands(userId);
+
+          // Add country label and internal note
+          if (conversationId) {
+            await chatwootService.addLabels(conversationId, [isMX ? 'mexico' : 'venezuela']);
+            await chatwootService.sendMessage(conversationId, {
+              content: `🔗 Xetux ID vinculado via deep link: ${xetuxId}`,
+              private: true,
+              message_type: 'outgoing',
+            });
+          }
+
           logger.info({ userId, xetuxId, contactId, conversationId }, 'Xetux ID updated via deep link');
           return { action: 'xetux_id_linked', xetuxId, contactId, conversationId };
         }

@@ -6,6 +6,9 @@ export async function fetchLogs(filters: LogFilters): Promise<LogsResponse> {
   const params = new URLSearchParams();
   if (filters.eventType) params.set('eventType', filters.eventType);
   if (filters.status) params.set('status', filters.status);
+  if (filters.direction) params.set('direction', filters.direction);
+  if (filters.search) params.set('search', filters.search);
+  if (filters.conversationId) params.set('conversationId', filters.conversationId);
   if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
   if (filters.dateTo) params.set('dateTo', filters.dateTo);
   if (filters.page) params.set('page', String(filters.page));
