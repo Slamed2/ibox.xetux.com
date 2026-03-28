@@ -380,26 +380,29 @@ bot.on('message', async (ctx) => {
 async function assignTeamAndConfirm(ctx: any, telegramUserId: number, teamId: number, teamLabel: string) {
   const conversationId = await chatwootService.findConversationByTelegramUserId(telegramUserId);
 
-  if (conversationId) {
-    recentBotAssignments.set(conversationId, Date.now());
-    await chatwootService.assignConversation(conversationId, { team_id: teamId });
-    const teamLabelTag = TEAM_LABELS[teamId];
-    if (teamLabelTag) {
-      await chatwootService.addLabels(conversationId, [teamLabelTag]);
-    }
-  } else {
+  if (!conversationId) {
     logger.warn({ telegramUserId }, 'No Chatwoot conversation found for team assignment');
   }
 
+  // 1. Send confirmation to Telegram FIRST
   const confirmText = `✅ Conversación #${conversationId ?? ''} asignada a *${teamLabel}*.\n\nUn agente te atenderá pronto.\n\nSi deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.`;
   const sentMsg = await ctx.reply(confirmText, { parse_mode: 'Markdown' });
 
+  // 2. Sync confirmation to Chatwoot
   if (conversationId) {
     await chatwootService.sendMessage(conversationId, {
       content: `✅ Conversación #${conversationId} asignada a ${teamLabel}.\n\nUn agente te atenderá pronto.\n\nSi deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.`,
       message_type: 'outgoing',
       source_id: String(sentMsg.message_id),
     });
+
+    // 3. Assign team AFTER — so Chatwoot's auto-greeting arrives after our confirmation
+    recentBotAssignments.set(conversationId, Date.now());
+    await chatwootService.assignConversation(conversationId, { team_id: teamId });
+    const teamLabelTag = TEAM_LABELS[teamId];
+    if (teamLabelTag) {
+      await chatwootService.addLabels(conversationId, [teamLabelTag]);
+    }
   }
 
   return { action: 'team_assigned', teamId, teamLabel, conversationId };
