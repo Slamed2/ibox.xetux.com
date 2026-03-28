@@ -119,8 +119,8 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
           .text('💼 Consultoría', `team:${country === 'mx' ? TEAMS.CONSULTORIA_MX : TEAMS.CONSULTORIA_VE}:Consultoría`)
           .text('🛠 Soporte', `team:${country === 'mx' ? TEAMS.SOPORTE_MX : TEAMS.SOPORTE_VE}:Soporte`)
           .row()
-          .text('🛒 Ventas', `team:${TEAMS.VENTAS}:Ventas`)
-          .text('📋 Administración', `team:${TEAMS.ADMINISTRACION}:Administración`);
+          .text('🛒 Ventas', `team:${country === 'mx' ? TEAMS.VENTAS_MX : TEAMS.VENTAS_VE}:Ventas`)
+          .text('📋 Administración', `team:${country === 'mx' ? TEAMS.ADMINISTRACION_MX : TEAMS.ADMINISTRACION_VE}:Administración`);
 
         const sentMsg = await bot.api.sendMessage(telegramUserId, WELCOME_WITH_XETUX, {
           reply_markup: deptKeyboard,

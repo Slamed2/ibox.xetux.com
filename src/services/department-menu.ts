@@ -5,9 +5,17 @@ export const TEAMS = {
   SOPORTE_MX: 1,
   SOPORTE_VE: 2,
   CONSULTORIA_VE: 5,
+  VENTAS_MX: 9,
+  VENTAS_VE: 10,
+  ADMINISTRACION_MX: 11,
+  ADMINISTRACION_VE: 12,
+  CONSULTORIA_MX: 8,
+} as const;
+
+// Old team IDs (kept for backward compatibility with existing conversations)
+export const LEGACY_TEAMS = {
   VENTAS: 6,
   ADMINISTRACION: 7,
-  CONSULTORIA_MX: 8,
 } as const;
 
 // Team ID → Chatwoot label mapping
@@ -15,18 +23,31 @@ export const TEAM_LABELS: Record<number, string> = {
   [TEAMS.SOPORTE_MX]: 'soporte-mexico',
   [TEAMS.SOPORTE_VE]: 'soporte-venezuela',
   [TEAMS.CONSULTORIA_VE]: 'consultoria-venezuela',
-  [TEAMS.VENTAS]: 'ventas',
-  [TEAMS.ADMINISTRACION]: 'administracion',
   [TEAMS.CONSULTORIA_MX]: 'consultoria-mexico',
+  [TEAMS.VENTAS_MX]: 'ventas-mexico',
+  [TEAMS.VENTAS_VE]: 'ventas-venezuela',
+  [TEAMS.ADMINISTRACION_MX]: 'administracion-mexico',
+  [TEAMS.ADMINISTRACION_VE]: 'administracion-venezuela',
+  // Legacy
+  [LEGACY_TEAMS.VENTAS]: 'ventas',
+  [LEGACY_TEAMS.ADMINISTRACION]: 'administracion',
 };
 
-// Command → department mapping for direct departments (no country needed)
-export const DIRECT_COMMANDS: Record<string, { teamId: number; label: string }> = {
-  ventas: { teamId: TEAMS.VENTAS, label: 'Ventas' },
-  administracion: { teamId: TEAMS.ADMINISTRACION, label: 'Administración' },
+// Team names for display
+export const TEAM_NAMES: Record<number, string> = {
+  [TEAMS.SOPORTE_MX]: 'Soporte México',
+  [TEAMS.SOPORTE_VE]: 'Soporte Venezuela',
+  [TEAMS.CONSULTORIA_MX]: 'Consultoría México',
+  [TEAMS.CONSULTORIA_VE]: 'Consultoría Venezuela',
+  [TEAMS.VENTAS_MX]: 'Ventas México',
+  [TEAMS.VENTAS_VE]: 'Ventas Venezuela',
+  [TEAMS.ADMINISTRACION_MX]: 'Administración México',
+  [TEAMS.ADMINISTRACION_VE]: 'Administración Venezuela',
+  [LEGACY_TEAMS.VENTAS]: 'Ventas',
+  [LEGACY_TEAMS.ADMINISTRACION]: 'Administración',
 };
 
-// Commands that need country selection
+// All departments now require country — resolved by xetux_id prefix
 export const COUNTRY_COMMANDS: Record<string, Record<string, { teamId: number; label: string }>> = {
   consultoria: {
     '🇲🇽 México': { teamId: TEAMS.CONSULTORIA_MX, label: 'Consultoría México' },
@@ -35,6 +56,14 @@ export const COUNTRY_COMMANDS: Record<string, Record<string, { teamId: number; l
   soporte: {
     '🇲🇽 México': { teamId: TEAMS.SOPORTE_MX, label: 'Soporte México' },
     '🇻🇪 Venezuela': { teamId: TEAMS.SOPORTE_VE, label: 'Soporte Venezuela' },
+  },
+  ventas: {
+    '🇲🇽 México': { teamId: TEAMS.VENTAS_MX, label: 'Ventas México' },
+    '🇻🇪 Venezuela': { teamId: TEAMS.VENTAS_VE, label: 'Ventas Venezuela' },
+  },
+  administracion: {
+    '🇲🇽 México': { teamId: TEAMS.ADMINISTRACION_MX, label: 'Administración México' },
+    '🇻🇪 Venezuela': { teamId: TEAMS.ADMINISTRACION_VE, label: 'Administración Venezuela' },
   },
 };
 
