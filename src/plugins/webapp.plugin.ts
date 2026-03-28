@@ -46,7 +46,7 @@ const WEBAPP_HTML = `<!DOCTYPE html>
         .error-text { color: #e53935; font-size: 12px; margin-top: 4px; display: none; }
         .error-text.visible { display: block; }
         .label-row { display: flex; align-items: center; gap: 6px; }
-        .help-icon { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #e1983d; color: #000; font-size: 11px; font-weight: 700; cursor: pointer; flex-shrink: 0; position: relative; top: -1px; }
+        .help-icon { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #e1983d; color: #000; font-size: 11px; font-weight: 700; cursor: pointer; flex-shrink: 0; margin-bottom: 6px; }
         .tooltip-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.92); z-index: 100; justify-content: center; align-items: center; flex-direction: column; overflow: hidden; touch-action: none; }
         .tooltip-overlay.visible { display: flex; }
         .tooltip-img-container { width: 100%; flex: 1; display: flex; justify-content: center; align-items: center; overflow: hidden; touch-action: pinch-zoom; }
