@@ -1,6 +1,11 @@
 import { FastifyPluginAsync } from 'fastify';
 import { AxiosError } from 'axios';
 import { InlineKeyboard } from 'grammy';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import { chatwootService } from '../services/chatwoot.service.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
 import { bot, enableUserCommands } from '../services/telegram.service.js';
@@ -40,6 +45,13 @@ const WEBAPP_HTML = `<!DOCTYPE html>
         .error { border-color: #e53935 !important; }
         .error-text { color: #e53935; font-size: 12px; margin-top: 4px; display: none; }
         .error-text.visible { display: block; }
+        .label-row { display: flex; align-items: center; gap: 6px; }
+        .help-icon { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: #e1983d; color: #000; font-size: 12px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
+        .tooltip-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); z-index: 100; padding: 20px; justify-content: center; align-items: center; flex-direction: column; }
+        .tooltip-overlay.visible { display: flex; }
+        .tooltip-overlay img { max-width: 100%; max-height: 60vh; border-radius: 10px; margin-bottom: 16px; }
+        .tooltip-overlay p { color: #fff; font-size: 14px; text-align: center; max-width: 300px; line-height: 1.5; }
+        .tooltip-overlay .close-btn { margin-top: 16px; padding: 8px 24px; background: #e1983d; color: #000; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -66,11 +78,19 @@ const WEBAPP_HTML = `<!DOCTYPE html>
                 <div class="error-text" id="email-error">Ingresa un email válido</div>
             </div>
             <div class="form-group">
-                <label for="xetux_id">Xetux ID *</label>
-                <input type="text" id="xetux_id" placeholder="Ej: VE-1234 o MX-123" required autocapitalize="characters">
-                <div class="error-text" id="xetux_id-error">Formato: MX-123456 o VE-123456</div>
+                <div class="label-row">
+                    <label for="xetux_id">Xetux ID *</label>
+                    <span class="help-icon" id="xetux-help">?</span>
+                </div>
+                <input type="text" id="xetux_id" placeholder="Ej: VE00029 o MX00023" required autocapitalize="characters" maxlength="7">
+                <div class="error-text" id="xetux_id-error">Formato: 2 letras (MX o VE) + 5 digitos. Ej: VE00029</div>
             </div>
         </form>
+    </div>
+    <div class="tooltip-overlay" id="xetux-tooltip">
+        <img src="/webapp/xetux-id-help.png" alt="Donde encontrar tu Xetux ID">
+        <p>Tu Xetux ID se encuentra en la pantalla principal de la app Xetux, en el campo marcado como "XETUX ID".</p>
+        <button class="close-btn" id="close-tooltip">Entendido</button>
     </div>
     <script>
         var tg = window.Telegram.WebApp;
@@ -91,25 +111,30 @@ const WEBAPP_HTML = `<!DOCTYPE html>
             document.getElementById('xetux_id').value = prefillXetuxId;
         }
 
-        // Auto-format Xetux ID: uppercase + insert dash after MX/VE
-        var xetuxHint = document.getElementById('xetux_id-error');
+        // Tooltip handlers
+        document.getElementById('xetux-help').addEventListener('click', function() {
+            document.getElementById('xetux-tooltip').classList.add('visible');
+        });
+        document.getElementById('close-tooltip').addEventListener('click', function() {
+            document.getElementById('xetux-tooltip').classList.remove('visible');
+        });
+        document.getElementById('xetux-tooltip').addEventListener('click', function(e) {
+            if (e.target === this) this.classList.remove('visible');
+        });
+
+        // Auto-format Xetux ID: uppercase, 2 letters (MX/VE) + 5 digits, no dash
         document.getElementById('xetux_id').addEventListener('input', function() {
-            var val = this.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+            var val = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
             // Check prefix: must start with MX or VE
             if (val.length >= 2 && !(/^(MX|VE|M|V)/.test(val))) {
                 tg.showAlert('El Xetux ID debe comenzar con MX o VE');
                 this.value = '';
                 return;
             }
-            // Insert dash after MX or VE if followed by a digit
-            if (/^(MX|VE)\\d/.test(val) && val.charAt(2) !== '-') {
-                val = val.slice(0, 2) + '-' + val.slice(2);
-            }
-            // Remove any dash that's not in position 2
-            var prefix = val.slice(0, 3);
-            var rest = val.slice(3).replace(/-/g, '');
-            val = prefix + rest;
-            this.value = val;
+            // Keep only 2 letters + up to 5 digits
+            var letters = val.slice(0, 2).replace(/[^A-Z]/g, '');
+            var digits = val.slice(2).replace(/[^0-9]/g, '').slice(0, 5);
+            this.value = letters + digits;
         });
 
         function validate() {
@@ -137,7 +162,7 @@ const WEBAPP_HTML = `<!DOCTYPE html>
                 valid = false;
             }
             var xetux_id = document.getElementById('xetux_id');
-            var regex = /^(?:MX|VE)-\\d+$/;
+            var regex = /^(?:MX|VE)\\d{5}$/;
             if (!regex.test(xetux_id.value.trim())) {
                 xetux_id.classList.add('error');
                 document.getElementById('xetux_id-error').classList.add('visible');
@@ -190,6 +215,17 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
   // Serve the mini app HTML
   fastify.get('/webapp', async (_request, reply) => {
     reply.type('text/html').send(WEBAPP_HTML);
+  });
+
+  // Serve help image for Xetux ID tooltip
+  fastify.get('/webapp/xetux-id-help.png', async (_request, reply) => {
+    const imgPath = path.resolve(__dirname, '../assets/xetux-id-help.png');
+    if (fs.existsSync(imgPath)) {
+      const img = fs.readFileSync(imgPath);
+      reply.type('image/png').send(img);
+    } else {
+      reply.code(404).send('Image not found');
+    }
   });
 
   // Handle form submission — update Chatwoot contact
