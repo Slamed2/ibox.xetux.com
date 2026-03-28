@@ -53,7 +53,7 @@ export async function handleConversationResolved(payload: ChatwootWebhookPayload
 
       // Save summary in conversation custom_attributes
       await chatwootService.updateConversationCustomAttributes(conversation.id, {
-        informe_ia: summary,
+        resumen_de_ia: summary,
       });
 
       logger.info({ conversationId: conversation.id }, 'Conversation closed with farewell and AI summary');
