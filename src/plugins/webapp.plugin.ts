@@ -84,6 +84,12 @@ const WEBAPP_HTML = `<!DOCTYPE html>
         var params = new URLSearchParams(window.location.search);
         var contactId = params.get('contact_id');
         var conversationId = params.get('conversation_id');
+        var prefillXetuxId = params.get('xetux_id');
+
+        // Pre-fill xetux_id from deep link if available
+        if (prefillXetuxId) {
+            document.getElementById('xetux_id').value = prefillXetuxId;
+        }
 
         // Auto-format Xetux ID: uppercase + insert dash after MX/VE
         var xetuxHint = document.getElementById('xetux_id-error');

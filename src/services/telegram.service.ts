@@ -23,6 +23,22 @@ const pendingDepartment = new Map<number, string>();
 // Key: conversationId, Value: timestamp — expires after 10 seconds
 const recentBotAssignments = new Map<number, number>();
 
+// Pending deep link xetux IDs — stored when /start arrives before conversation exists
+const pendingDeepLinkXetuxIds = new Map<number, { xetuxId: string; timestamp: number }>();
+
+export function setPendingDeepLinkXetuxId(telegramUserId: number, xetuxId: string): void {
+  pendingDeepLinkXetuxIds.set(telegramUserId, { xetuxId, timestamp: Date.now() });
+}
+
+export function consumePendingDeepLinkXetuxId(telegramUserId: number): string | null {
+  const entry = pendingDeepLinkXetuxIds.get(telegramUserId);
+  if (!entry) return null;
+  pendingDeepLinkXetuxIds.delete(telegramUserId);
+  // Expire after 30 seconds
+  if (Date.now() - entry.timestamp > 30_000) return null;
+  return entry.xetuxId;
+}
+
 export function wasBotAssignment(conversationId: number): boolean {
   const ts = recentBotAssignments.get(conversationId);
   if (!ts) return false;
@@ -90,7 +106,10 @@ bot.command('start', async (ctx) => {
           return { action: 'xetux_id_linked', xetuxId, contactId, conversationId };
         }
 
-        return { action: 'deep_link_no_contact', xetuxId };
+        // No conversation yet — store xetux_id for when conversation_created fires
+        setPendingDeepLinkXetuxId(userId, xetuxId);
+        logger.info({ userId, xetuxId }, 'Deep link xetux_id stored, waiting for conversation_created');
+        return { action: 'deep_link_pending', xetuxId };
       }
 
       return { handled: 'deferred_to_chatwoot_conversation_created' };
