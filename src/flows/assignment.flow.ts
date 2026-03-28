@@ -16,17 +16,10 @@ const TEAM_NAMES: Record<number, string> = {
 
 export async function handleConversationUpdated(payload: ChatwootWebhookPayload) {
   const conversation = payload.conversation;
-  const changedAttributes = payload.changed_attributes;
-  if (!conversation || !changedAttributes) return;
+  if (!conversation) return;
 
-  // Check if team_id changed
-  const teamChange = changedAttributes.find(
-    (attr: any) => 'team_id' in (attr as Record<string, unknown>)
-  );
-
-  // Alternative: check via changed_attributes structure from Chatwoot
   // Chatwoot sends changed_attributes as { attribute_name: { previous_value, current_value } }
-  const changes = payload.changed_attributes as unknown as Record<string, { previous_value: unknown; current_value: unknown }>;
+  const changes = payload.changed_attributes as unknown as Record<string, { previous_value: unknown; current_value: unknown }> | undefined;
   if (!changes?.team_id) return;
 
   const previousTeamId = changes.team_id.previous_value as number | null;
