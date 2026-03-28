@@ -214,8 +214,11 @@ bot.on('callback_query:data', async (ctx) => {
           }
         }
 
-        // Edit the original message to show selection (remove buttons)
-        await ctx.editMessageText(`✅ Conversación #${conversationId ?? ''} asignada a *${teamLabel}*.\n\nUn agente te atenderá pronto.`, {
+        // Remove inline buttons from the original message (keep the text)
+        await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+
+        // Send confirmation as a separate message
+        await ctx.reply(`✅ Conversación #${conversationId ?? ''} asignada a *${teamLabel}*.\n\nUn agente te atenderá pronto.`, {
           parse_mode: 'Markdown',
         });
 
