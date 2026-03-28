@@ -39,7 +39,6 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
     },
     async () => {
       if (!telegramUserId) {
-        // No Telegram — send via Chatwoot only
         const content = !xetuxId
           ? WELCOME_NO_XETUX + `\n\n🔗 ${WEBAPP_URL}\n\n${MENU_TEXT}`
           : WELCOME_WITH_XETUX + `\n\n${MENU_TEXT}`;
@@ -50,16 +49,21 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
       let telegramMessageId: number | undefined;
 
       if (!xetuxId) {
-        // No xetux_id: login button + department menu
-        const keyboard = new InlineKeyboard()
-          .webApp('🔑 Iniciar sesión', WEBAPP_URL).row()
-          .text('💼 Consultoría', 'dept:consultoria').text('🛠 Soporte', 'dept:soporte').row()
-          .text('🛒 Ventas', 'dept:ventas').text('📋 Administración', 'dept:administracion');
+        // No xetux_id: send login button (inline) first, then department menu (persistent)
+        const loginKeyboard = new InlineKeyboard()
+          .webApp('🔑 Iniciar sesión', WEBAPP_URL);
 
-        const sentMsg = await bot.api.sendMessage(telegramUserId, WELCOME_NO_XETUX, {
-          reply_markup: keyboard,
+        const loginMsg = await bot.api.sendMessage(telegramUserId, WELCOME_NO_XETUX, {
+          reply_markup: loginKeyboard,
         });
-        telegramMessageId = sentMsg.message_id;
+
+        // Then send department menu with persistent keyboard
+        const menuMsg = await bot.api.sendMessage(
+          telegramUserId,
+          'Selecciona el departamento con el que deseas comunicarte:',
+          { reply_markup: DEPARTMENT_KEYBOARD },
+        );
+        telegramMessageId = loginMsg.message_id;
 
         await chatwootService.sendMessage(conversation.id, {
           content: WELCOME_NO_XETUX + `\n\n🔗 [Iniciar sesión](${WEBAPP_URL})\n\n${MENU_TEXT}`,
@@ -68,7 +72,7 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
           source_id: String(telegramMessageId),
         });
       } else {
-        // Has xetux_id: just department menu
+        // Has xetux_id: greeting + persistent department keyboard
         const sentMsg = await bot.api.sendMessage(telegramUserId, WELCOME_WITH_XETUX, {
           reply_markup: DEPARTMENT_KEYBOARD,
         });
