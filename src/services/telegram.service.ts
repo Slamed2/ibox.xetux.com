@@ -65,8 +65,8 @@ bot.command('start', async (ctx) => {
       metadata: { chatType: ctx.chat.type, username: ctx.from?.username ?? null },
     },
     async () => {
-      // Check for deep link: /start XETUXID_VE-12345 (underscore separator, Telegram strips --)
-      const match = text.match(/XETUXID_([A-Za-z0-9-]+)/);
+      // Check for deep link: /start XETUXID--VE-12345 or XETUXID_VE-12345
+      const match = text.match(/XETUXID(?:--|_)([A-Za-z0-9-]+)/);
       if (match && userId) {
         const xetuxId = match[1].toUpperCase();
         const isMX = xetuxId.startsWith('MX');
