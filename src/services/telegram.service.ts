@@ -275,8 +275,13 @@ bot.catch((err) => {
 });
 
 export async function setupTelegramWebhook(webhookUrl: string) {
-  // Default commands (for users who haven't registered yet)
+  // Clear all previous commands at every scope
+  await bot.api.deleteMyCommands({ scope: { type: 'default' } });
+  await bot.api.deleteMyCommands({ scope: { type: 'all_private_chats' } });
+
+  // Set default commands (for users who haven't registered yet)
   await bot.api.setMyCommands(GUEST_COMMANDS, { scope: { type: 'default' } });
+  await bot.api.setMyCommands(GUEST_COMMANDS, { scope: { type: 'all_private_chats' } });
   logger.info('Default bot commands set to guest menu (registro only)');
 
   await bot.api.setWebhook(webhookUrl, {
