@@ -13,8 +13,22 @@ export const chatwootPlugin: FastifyPluginAsync = async (fastify) => {
     const payload = request.body as ChatwootWebhookPayload & Record<string, unknown>;
     const event = payload.event;
 
-    // Log full payload for debugging
-    logger.info({ event, keys: Object.keys(payload), conversationId: payload.conversation?.id }, 'Chatwoot webhook received');
+    const inboxId = payload.conversation?.inbox_id;
+
+    // Only process events from inbox 20 (Telegram) and from contacts
+    if (inboxId && inboxId !== 20) {
+      logger.debug({ event, inboxId }, 'Ignoring event from non-Telegram inbox');
+      return { status: 'ok' };
+    }
+
+    // Skip events triggered by agents/bots (only process contact-originated events)
+    const messageSenderType = payload.message?.sender?.type;
+    if (messageSenderType && messageSenderType !== 'contact') {
+      logger.debug({ event, senderType: messageSenderType }, 'Ignoring non-contact message');
+      return { status: 'ok' };
+    }
+
+    logger.info({ event, inboxId, conversationId: payload.conversation?.id }, 'Chatwoot webhook received');
 
     // Log every webhook event to dashboard for visibility
     withExecutionLog(
