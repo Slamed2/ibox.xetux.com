@@ -202,7 +202,7 @@ async function handleDepartmentCommand(ctx: any, command: string, displayName: s
       // Try to auto-resolve country from xetux_id
       const conversationId = await chatwootService.findConversationByTelegramUserId(userId);
       const conversation = conversationId ? await chatwootService.getConversation(conversationId) : null;
-      const xetuxId = conversation?.contact?.custom_attributes?.xetux_id as string | undefined;
+      const xetuxId = (conversation?.meta?.sender?.custom_attributes?.xetux_id ?? conversation?.contact?.custom_attributes?.xetux_id) as string | undefined;
 
       if (xetuxId) {
         const countryKey = xetuxId.toUpperCase().startsWith('MX') ? '🇲🇽 México' : '🇻🇪 Venezuela';
