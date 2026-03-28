@@ -71,6 +71,16 @@ class ChatwootService {
     return data;
   }
 
+  async getAgent(agentId: number) {
+    try {
+      const { data } = await this.client.get(`/agents/${agentId}`);
+      return data;
+    } catch {
+      logger.warn({ agentId }, 'Could not fetch agent info');
+      return null;
+    }
+  }
+
   async updateContact(contactId: number, payload: ChatwootUpdateContactPayload) {
     logger.debug({ contactId, ...payload }, 'Updating contact');
     const { data } = await this.client.put(`/contacts/${contactId}`, payload);

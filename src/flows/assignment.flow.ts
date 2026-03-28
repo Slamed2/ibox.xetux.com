@@ -18,22 +18,35 @@ export async function handleConversationUpdated(payload: ChatwootWebhookPayload)
   const conversation = payload.conversation;
   if (!conversation) return;
 
-  // Chatwoot sends changed_attributes as an array of objects:
-  // [{ updated_at: { previous_value, current_value } }, { team_id: { previous_value, current_value } }]
   const changedAttrs = payload.changed_attributes as unknown as Array<Record<string, { previous_value: unknown; current_value: unknown }>> | undefined;
   if (!changedAttrs || !Array.isArray(changedAttrs)) return;
 
+  const telegramUserId = conversation.contact?.additional_attributes?.social_telegram_user_id as number | undefined;
+
+  // Handle team change
   const teamChange = changedAttrs.find((attr) => 'team_id' in attr);
-  if (!teamChange) return;
+  if (teamChange) {
+    const previousTeamId = teamChange.team_id.previous_value as number | null;
+    const currentTeamId = teamChange.team_id.current_value as number | null;
 
-  const previousTeamId = teamChange.team_id.previous_value as number | null;
-  const currentTeamId = teamChange.team_id.current_value as number | null;
+    if (previousTeamId !== currentTeamId && !wasBotAssignment(conversation.id) && currentTeamId) {
+      await handleTeamChange(conversation, telegramUserId, currentTeamId, payload);
+    }
+  }
 
-  if (previousTeamId === currentTeamId) return;
+  // Handle assignee change
+  const assigneeChange = changedAttrs.find((attr) => 'assignee_id' in attr);
+  if (assigneeChange) {
+    const previousAssigneeId = assigneeChange.assignee_id.previous_value as number | null;
+    const currentAssigneeId = assigneeChange.assignee_id.current_value as number | null;
 
-  // Skip if this assignment was made by the bot itself (user selected from inline buttons)
-  if (wasBotAssignment(conversation.id)) return;
+    if (previousAssigneeId !== currentAssigneeId && currentAssigneeId) {
+      await handleAssigneeChange(conversation, telegramUserId, currentAssigneeId, payload);
+    }
+  }
+}
 
+async function handleTeamChange(conversation: any, telegramUserId: number | undefined, currentTeamId: number, payload: ChatwootWebhookPayload) {
   await withExecutionLog(
     {
       eventType: 'chatwoot:team_changed',
@@ -42,38 +55,68 @@ export async function handleConversationUpdated(payload: ChatwootWebhookPayload)
       inputData: payload,
       conversationId: String(conversation.id),
       contactId: String(conversation.contact?.id),
-      metadata: { previousTeamId, currentTeamId },
+      metadata: { currentTeamId },
     },
     async () => {
-      if (!currentTeamId) return { action: 'team_removed' };
-
       const teamName = TEAM_NAMES[currentTeamId] ?? `Equipo #${currentTeamId}`;
       const message = `🔄 Conversación #${conversation.id} transferida a *${teamName}*.\n\nUn agente te atenderá pronto.`;
 
-      // Send via Telegram
-      const telegramUserId = conversation.contact?.additional_attributes?.social_telegram_user_id as number | undefined;
       let telegramMessageId: number | undefined;
-
       if (telegramUserId) {
         const sentMsg = await bot.api.sendMessage(telegramUserId, message, { parse_mode: 'Markdown' });
         telegramMessageId = sentMsg.message_id;
       }
 
-      // Add team label
       const teamLabelTag = TEAM_LABELS[currentTeamId];
       if (teamLabelTag) {
         await chatwootService.addLabels(conversation.id, [teamLabelTag]);
       }
 
-      // Sync to Chatwoot
       await chatwootService.sendMessage(conversation.id, {
         content: `🔄 Conversación #${conversation.id} transferida a ${teamName}. Un agente te atenderá pronto.`,
         message_type: 'outgoing',
         ...(telegramMessageId ? { source_id: String(telegramMessageId) } : {}),
       });
 
-      logger.info({ conversationId: conversation.id, previousTeamId, currentTeamId, teamName }, 'Team change notified');
-      return { action: 'notified', previousTeamId, currentTeamId, telegramMessageId };
+      return { action: 'team_notified', currentTeamId, teamName };
+    },
+  );
+}
+
+async function handleAssigneeChange(conversation: any, telegramUserId: number | undefined, assigneeId: number, payload: ChatwootWebhookPayload) {
+  await withExecutionLog(
+    {
+      eventType: 'chatwoot:assignee_changed',
+      source: 'chatwoot_webhook',
+      direction: 'inbound',
+      inputData: payload,
+      conversationId: String(conversation.id),
+      contactId: String(conversation.contact?.id),
+      metadata: { assigneeId },
+    },
+    async () => {
+      // Get agent info from Chatwoot
+      const agent = await chatwootService.getAgent(assigneeId);
+      const agentName = agent?.name ?? 'Un agente';
+      const teamId = conversation.team_id as number | undefined;
+      const teamName = teamId ? (TEAM_NAMES[teamId] ?? '') : '';
+      const areaText = teamName ? ` del área de *${teamName}*` : '';
+
+      const message = `👋 Mi nombre es *${agentName}*${areaText} de Xetux y estaré encantado de atenderte.`;
+
+      let telegramMessageId: number | undefined;
+      if (telegramUserId) {
+        const sentMsg = await bot.api.sendMessage(telegramUserId, message, { parse_mode: 'Markdown' });
+        telegramMessageId = sentMsg.message_id;
+      }
+
+      await chatwootService.sendMessage(conversation.id, {
+        content: `👋 Mi nombre es ${agentName}${teamName ? ` del área de ${teamName}` : ''} de Xetux y estaré encantado de atenderte.`,
+        message_type: 'outgoing',
+        ...(telegramMessageId ? { source_id: String(telegramMessageId) } : {}),
+      });
+
+      return { action: 'assignee_notified', assigneeId, agentName, teamName };
     },
   );
 }
