@@ -218,7 +218,7 @@ bot.on('callback_query:data', async (ctx) => {
         await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
 
         // Send confirmation as a separate message
-        await ctx.reply(`✅ Conversación #${conversationId ?? ''} asignada a *${teamLabel}*.\n\nUn agente te atenderá pronto.`, {
+        await ctx.reply(`✅ Conversación #${conversationId ?? ''} asignada a *${teamLabel}*.\n\nUn agente te atenderá pronto.\n\nSi deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.`, {
           parse_mode: 'Markdown',
         });
 
@@ -265,7 +265,7 @@ async function assignTeamAndConfirm(ctx: any, telegramUserId: number, teamId: nu
     logger.warn({ telegramUserId }, 'No Chatwoot conversation found for team assignment');
   }
 
-  await ctx.reply(`✅ Conversación #${conversationId ?? ''} asignada a *${teamLabel}*.\n\nUn agente te atenderá pronto.`, {
+  await ctx.reply(`✅ Conversación #${conversationId ?? ''} asignada a *${teamLabel}*.\n\nUn agente te atenderá pronto.\n\nSi deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.`, {
     parse_mode: 'Markdown',
   });
 
