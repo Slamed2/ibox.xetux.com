@@ -65,9 +65,9 @@ bot.command('start', async (ctx) => {
       metadata: { chatType: ctx.chat.type, username: ctx.from?.username ?? null },
     },
     async () => {
-      // Check for deep link: /start XETUXID-MX12345 or XETUXID--VE-12345 or XETUXID_VE-12345
-      // Extract the xetux_id part: everything after XETUXID followed by separator(s)
-      const match = text.match(/XETUXID[-_]+([A-Za-z0-9-]+)/);
+      // Check for deep link: /start XETUXID-VE00029 or XETUXID_MX00023
+      // Format: 2 letters (MX/VE) + 5 digits
+      const match = text.match(/XETUXID[-_]+([A-Za-z]{2}\d{5})/);
       if (match && userId) {
         const xetuxId = match[1].toUpperCase();
         const isMX = xetuxId.startsWith('MX');
