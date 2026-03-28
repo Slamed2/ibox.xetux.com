@@ -4,7 +4,6 @@ import { withExecutionLog } from '../services/execution-log.service.js';
 import { bot } from '../services/telegram.service.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { logger } from '../utils/logger.js';
-const CLOSING_LABELS = ['atendido'];
 
 export async function handleConversationResolved(payload: ChatwootWebhookPayload) {
   const conversation = payload.conversation;
@@ -41,9 +40,6 @@ export async function handleConversationResolved(payload: ChatwootWebhookPayload
         ...(telegramMessageId ? { source_id: String(telegramMessageId) } : {}),
       });
 
-      // Add closing labels
-      await chatwootService.addLabels(conversation.id, CLOSING_LABELS);
-
       // Generate AI summary of the conversation
       const messages = await chatwootService.getMessages(conversation.id);
       const summary = await summarizeConversation(messages);
@@ -61,7 +57,7 @@ export async function handleConversationResolved(payload: ChatwootWebhookPayload
       });
 
       logger.info({ conversationId: conversation.id }, 'Conversation closed with farewell and AI summary');
-      return { farewell: 'sent', labels: CLOSING_LABELS, telegramMessageId, aiSummary: true };
+      return { farewell: 'sent', telegramMessageId, aiSummary: true };
     },
   );
 }
