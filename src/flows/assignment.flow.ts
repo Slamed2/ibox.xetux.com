@@ -1,16 +1,18 @@
 import { chatwootService } from '../services/chatwoot.service.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
+import { bot } from '../services/telegram.service.js';
+import { TEAMS } from '../services/department-menu.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { logger } from '../utils/logger.js';
 
-// TODO: Configurar mensajes por equipo
-const TEAM_MESSAGES: Record<number, string> = {
-  // Ejemplo:
-  // 1: 'Tu conversación ha sido transferida al equipo de Soporte.',
-  // 2: 'Tu conversación ha sido transferida al equipo de Facturación.',
+const TEAM_NAMES: Record<number, string> = {
+  [TEAMS.SOPORTE_MX]: 'Soporte México',
+  [TEAMS.SOPORTE_VE]: 'Soporte Venezuela',
+  [TEAMS.CONSULTORIA_VE]: 'Consultoría Venezuela',
+  [TEAMS.VENTAS]: 'Ventas',
+  [TEAMS.ADMINISTRACION]: 'Administración',
+  [TEAMS.CONSULTORIA_MX]: 'Consultoría México',
 };
-
-const DEFAULT_TRANSFER_MESSAGE = 'Tu conversación ha sido transferida. Un agente del nuevo equipo te atenderá pronto.';
 
 export async function handleConversationUpdated(payload: ChatwootWebhookPayload) {
   const conversation = payload.conversation;
@@ -45,14 +47,27 @@ export async function handleConversationUpdated(payload: ChatwootWebhookPayload)
     async () => {
       if (!currentTeamId) return { action: 'team_removed' };
 
-      const message = TEAM_MESSAGES[currentTeamId] ?? DEFAULT_TRANSFER_MESSAGE;
+      const teamName = TEAM_NAMES[currentTeamId] ?? `Equipo #${currentTeamId}`;
+      const message = `🔄 Conversación #${conversation.id} transferida a *${teamName}*.\n\nUn agente te atenderá pronto.`;
+
+      // Send via Telegram
+      const telegramUserId = conversation.contact?.additional_attributes?.social_telegram_user_id as number | undefined;
+      let telegramMessageId: number | undefined;
+
+      if (telegramUserId) {
+        const sentMsg = await bot.api.sendMessage(telegramUserId, message, { parse_mode: 'Markdown' });
+        telegramMessageId = sentMsg.message_id;
+      }
+
+      // Sync to Chatwoot
       await chatwootService.sendMessage(conversation.id, {
-        content: message,
+        content: `🔄 Conversación #${conversation.id} transferida a ${teamName}. Un agente te atenderá pronto.`,
         message_type: 'outgoing',
+        ...(telegramMessageId ? { source_id: String(telegramMessageId) } : {}),
       });
 
-      logger.info({ conversationId: conversation.id, previousTeamId, currentTeamId }, 'Team change notified');
-      return { action: 'notified', previousTeamId, currentTeamId };
+      logger.info({ conversationId: conversation.id, previousTeamId, currentTeamId, teamName }, 'Team change notified');
+      return { action: 'notified', previousTeamId, currentTeamId, telegramMessageId };
     },
   );
 }

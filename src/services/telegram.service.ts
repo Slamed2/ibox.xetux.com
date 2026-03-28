@@ -161,13 +161,13 @@ bot.on('callback_query:data', async (ctx) => {
         if (conversationId) {
           await chatwootService.assignConversation(conversationId, { team_id: teamId });
           await chatwootService.sendMessage(conversationId, {
-            content: `📌 Departamento seleccionado: ${teamLabel}`,
+            content: `📌 Departamento seleccionado: ${teamLabel} (Conversación #${conversationId})`,
             message_type: 'outgoing',
           });
         }
 
         // Edit the original message to show selection (remove buttons)
-        await ctx.editMessageText(`✅ Tu conversación fue asignada a *${teamLabel}*.\n\nUn agente te atenderá pronto.`, {
+        await ctx.editMessageText(`✅ Conversación #${conversationId ?? ''} asignada a *${teamLabel}*.\n\nUn agente te atenderá pronto.`, {
           parse_mode: 'Markdown',
         });
 
@@ -207,14 +207,14 @@ async function assignTeamAndConfirm(ctx: any, telegramUserId: number, teamId: nu
     await chatwootService.assignConversation(conversationId, { team_id: teamId });
 
     await chatwootService.sendMessage(conversationId, {
-      content: `📌 Departamento seleccionado: ${teamLabel}`,
+      content: `📌 Departamento seleccionado: ${teamLabel} (Conversación #${conversationId})`,
       message_type: 'outgoing',
     });
   } else {
     logger.warn({ telegramUserId }, 'No Chatwoot conversation found for team assignment');
   }
 
-  await ctx.reply(`✅ Tu conversación fue asignada a *${teamLabel}*.\n\nUn agente te atenderá pronto.`, {
+  await ctx.reply(`✅ Conversación #${conversationId ?? ''} asignada a *${teamLabel}*.\n\nUn agente te atenderá pronto.`, {
     parse_mode: 'Markdown',
   });
 
