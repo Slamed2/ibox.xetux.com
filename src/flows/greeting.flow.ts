@@ -1,6 +1,6 @@
 import { chatwootService } from '../services/chatwoot.service.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
-import { bot, enableUserCommands, consumePendingDeepLinkXetuxId } from '../services/telegram.service.js';
+import { bot, enableUserCommands, resetUserCommands, consumePendingDeepLinkXetuxId } from '../services/telegram.service.js';
 import { MENU_TEXT, TEAMS } from '../services/department-menu.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { logger } from '../utils/logger.js';
@@ -58,13 +58,16 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
         webappUrl += `&xetux_id=${encodeURIComponent(deepLinkXetuxId)}`;
       }
 
-      // Add country label and enable commands if we know the user
+      // Add country label and set commands based on user state
       if (effectiveXetuxId) {
         const countryLabel = effectiveXetuxId.toUpperCase().startsWith('MX') ? 'mexico' : 'venezuela';
         await chatwootService.addLabels(conversation.id, [countryLabel]);
         if (telegramUserId) {
           await enableUserCommands(telegramUserId);
         }
+      } else if (telegramUserId) {
+        // No xetux_id: reset to guest menu (handles deleted contacts)
+        await resetUserCommands(telegramUserId);
       }
 
       if (!telegramUserId) {

@@ -440,6 +440,17 @@ export async function enableUserCommands(telegramUserId: number) {
 }
 
 /**
+ * Reset commands to guest menu (registro only) for a specific user.
+ * Call this when a contact is deleted or xetux_id is removed.
+ */
+export async function resetUserCommands(telegramUserId: number) {
+  await bot.api.setMyCommands(GUEST_COMMANDS, {
+    scope: { type: 'chat', chat_id: telegramUserId },
+  });
+  logger.info({ telegramUserId }, 'Commands reset to guest menu for user');
+}
+
+/**
  * Send a message via grammY and sync to Chatwoot with the message_id.
  */
 export async function sendTelegramMessage(chatId: number | string, text: string) {
