@@ -8,52 +8,48 @@ import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { logger } from '../utils/logger.js';
 
 export const chatwootPlugin: FastifyPluginAsync = async (fastify) => {
-  fastify.post<{ Body: ChatwootWebhookPayload }>('/chatwoot', async (request, reply) => {
-    const payload = request.body;
+  fastify.post('/chatwoot', async (request, reply) => {
+    const payload = request.body as ChatwootWebhookPayload & Record<string, unknown>;
     const event = payload.event;
 
-    logger.info({ event, conversationId: payload.conversation?.id }, 'Chatwoot webhook received');
+    // Log full payload for debugging
+    logger.info({ event, keys: Object.keys(payload), conversationId: payload.conversation?.id }, 'Chatwoot webhook received');
 
-    // Dispatch to the correct flow handler (fire-and-forget to respond quickly)
-    try {
-      switch (event) {
-        case 'conversation_created':
-          // Don't await - respond to webhook quickly, process async
-          handleConversationCreated(payload).catch(err =>
-            logger.error({ err, event }, 'Error in greeting flow'));
-          break;
+    // Log every webhook event to dashboard for visibility
+    withExecutionLog(
+      {
+        eventType: `chatwoot:${event ?? 'unknown'}`,
+        source: 'chatwoot_webhook',
+        direction: 'inbound',
+        inputData: payload,
+        conversationId: String(payload.conversation?.id ?? payload.id ?? ''),
+        contactId: String(payload.conversation?.contact?.id ?? ''),
+        metadata: { eventRaw: event, payloadKeys: Object.keys(payload) },
+      },
+      async () => {
+        // Dispatch to the correct flow handler
+        switch (event) {
+          case 'conversation_created':
+            await handleConversationCreated(payload);
+            return { action: 'greeting_flow' };
 
-        case 'message_created':
-          handleMessageCreated(payload).catch(err =>
-            logger.error({ err, event }, 'Error in routing flow'));
-          break;
+          case 'message_created':
+            await handleMessageCreated(payload);
+            return { action: 'routing_flow' };
 
-        case 'conversation_status_changed':
-          handleConversationResolved(payload).catch(err =>
-            logger.error({ err, event }, 'Error in closing flow'));
-          break;
+          case 'conversation_status_changed':
+            await handleConversationResolved(payload);
+            return { action: 'closing_flow' };
 
-        case 'conversation_updated':
-          handleConversationUpdated(payload).catch(err =>
-            logger.error({ err, event }, 'Error in assignment flow'));
-          break;
+          case 'conversation_updated':
+            await handleConversationUpdated(payload);
+            return { action: 'assignment_flow' };
 
-        default:
-          withExecutionLog(
-            {
-              eventType: `chatwoot:${event}`,
-              source: 'chatwoot_webhook',
-              direction: 'inbound',
-              inputData: payload,
-              conversationId: String(payload.conversation?.id ?? ''),
-              contactId: String(payload.conversation?.contact?.id ?? ''),
-            },
-            async () => ({ action: 'unhandled', event }),
-          ).catch(err => logger.error({ err, event }, 'Error logging unhandled event'));
-      }
-    } catch (err) {
-      logger.error({ err, event }, 'Error dispatching Chatwoot event');
-    }
+          default:
+            return { action: 'unhandled', event };
+        }
+      },
+    ).catch(err => logger.error({ err, event }, 'Error processing Chatwoot webhook'));
 
     return { status: 'ok' };
   });
