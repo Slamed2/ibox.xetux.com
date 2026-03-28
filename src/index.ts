@@ -1,10 +1,26 @@
 import Fastify from 'fastify';
+import { migrate } from 'drizzle-orm/node-postgres/migrator';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { logger } from './utils/logger.js';
+import { db } from './db/connection.js';
 import { healthPlugin } from './plugins/health.plugin.js';
 import { chatwootPlugin } from './plugins/chatwoot.plugin.js';
 import { telegramPlugin } from './plugins/telegram.plugin.js';
 import { dashboardPlugin } from './plugins/dashboard.plugin.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Run database migrations on startup
+try {
+  logger.info('Running database migrations...');
+  await migrate(db, { migrationsFolder: path.resolve(__dirname, './db/migrations') });
+  logger.info('Database migrations completed');
+} catch (err) {
+  logger.error(err, 'Failed to run database migrations');
+  process.exit(1);
+}
 
 const app = Fastify({ logger: false });
 
