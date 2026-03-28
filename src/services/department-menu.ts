@@ -10,6 +10,16 @@ export const TEAMS = {
   CONSULTORIA_MX: 8,
 } as const;
 
+// Team ID → Chatwoot label mapping
+export const TEAM_LABELS: Record<number, string> = {
+  [TEAMS.SOPORTE_MX]: 'soporte-mexico',
+  [TEAMS.SOPORTE_VE]: 'soporte-venezuela',
+  [TEAMS.CONSULTORIA_VE]: 'consultoria-venezuela',
+  [TEAMS.VENTAS]: 'ventas',
+  [TEAMS.ADMINISTRACION]: 'administracion',
+  [TEAMS.CONSULTORIA_MX]: 'consultoria-mexico',
+};
+
 // Command → department mapping for direct departments (no country needed)
 export const DIRECT_COMMANDS: Record<string, { teamId: number; label: string }> = {
   ventas: { teamId: TEAMS.VENTAS, label: 'Ventas' },

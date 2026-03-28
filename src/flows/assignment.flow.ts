@@ -1,7 +1,7 @@
 import { chatwootService } from '../services/chatwoot.service.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
 import { bot, wasBotAssignment } from '../services/telegram.service.js';
-import { TEAMS } from '../services/department-menu.js';
+import { TEAMS, TEAM_LABELS } from '../services/department-menu.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { logger } from '../utils/logger.js';
 
@@ -53,6 +53,12 @@ export async function handleConversationUpdated(payload: ChatwootWebhookPayload)
       if (telegramUserId) {
         const sentMsg = await bot.api.sendMessage(telegramUserId, message, { parse_mode: 'Markdown' });
         telegramMessageId = sentMsg.message_id;
+      }
+
+      // Add team label
+      const teamLabelTag = TEAM_LABELS[currentTeamId];
+      if (teamLabelTag) {
+        await chatwootService.addLabels(conversation.id, [teamLabelTag]);
       }
 
       // Sync to Chatwoot

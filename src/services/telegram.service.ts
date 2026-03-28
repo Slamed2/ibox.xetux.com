@@ -9,6 +9,7 @@ import {
   COUNTRY_KEYBOARD,
   COUNTRY_BUTTONS,
   BOT_COMMANDS,
+  TEAM_LABELS,
 } from './department-menu.js';
 
 export const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
@@ -176,6 +177,10 @@ bot.on('callback_query:data', async (ctx) => {
         if (conversationId) {
           recentBotAssignments.set(conversationId, Date.now());
           await chatwootService.assignConversation(conversationId, { team_id: teamId });
+          const teamLabelTag = TEAM_LABELS[teamId];
+          if (teamLabelTag) {
+            await chatwootService.addLabels(conversationId, [teamLabelTag]);
+          }
         }
 
         // Edit the original message to show selection (remove buttons)
@@ -218,6 +223,10 @@ async function assignTeamAndConfirm(ctx: any, telegramUserId: number, teamId: nu
   if (conversationId) {
     recentBotAssignments.set(conversationId, Date.now());
     await chatwootService.assignConversation(conversationId, { team_id: teamId });
+    const teamLabelTag = TEAM_LABELS[teamId];
+    if (teamLabelTag) {
+      await chatwootService.addLabels(conversationId, [teamLabelTag]);
+    }
   } else {
     logger.warn({ telegramUserId }, 'No Chatwoot conversation found for team assignment');
   }
