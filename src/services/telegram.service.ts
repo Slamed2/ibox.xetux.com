@@ -80,7 +80,7 @@ bot.command('start', async (ctx) => {
         // Try to update existing contact if found
         const conversationId = await chatwootService.findConversationByTelegramUserId(userId);
         const conversation = conversationId ? await chatwootService.getConversation(conversationId) : null;
-        const contactId = conversation?.contact?.id ?? conversation?.meta?.sender?.id;
+        const contactId = conversation?.meta?.sender?.id;
 
         if (contactId) {
           await chatwootService.updateContact(contactId, {
@@ -130,7 +130,7 @@ bot.command('registro', async (ctx) => {
       // Find conversation and contact in Chatwoot
       const conversationId = await chatwootService.findConversationByTelegramUserId(userId!);
       const conversation = conversationId ? await chatwootService.getConversation(conversationId) : null;
-      const contactId = conversation?.contact?.id ?? conversation?.meta?.sender?.id ?? '';
+      const contactId = conversation?.meta?.sender?.id ?? '';
 
       const webappUrl = `${WEBAPP_BASE_URL}?contact_id=${contactId}&conversation_id=${conversationId ?? ''}`;
       const keyboard = new InlineKeyboard().webApp('🔑 Iniciar sesión', webappUrl);
@@ -202,7 +202,7 @@ async function handleDepartmentCommand(ctx: any, command: string, displayName: s
       // Try to auto-resolve country from xetux_id
       const conversationId = await chatwootService.findConversationByTelegramUserId(userId);
       const conversation = conversationId ? await chatwootService.getConversation(conversationId) : null;
-      const xetuxId = (conversation?.meta?.sender?.custom_attributes?.xetux_id ?? conversation?.contact?.custom_attributes?.xetux_id) as string | undefined;
+      const xetuxId = conversation?.meta?.sender?.custom_attributes?.xetux_id as string | undefined;
 
       if (xetuxId) {
         const countryKey = xetuxId.toUpperCase().startsWith('MX') ? '🇲🇽 México' : '🇻🇪 Venezuela';
@@ -213,7 +213,7 @@ async function handleDepartmentCommand(ctx: any, command: string, displayName: s
       }
 
       // No xetux_id — show login button
-      const contactId = conversation?.contact?.id ?? conversation?.meta?.sender?.id ?? '';
+      const contactId = conversation?.meta?.sender?.id ?? '';
       const webappUrl = `${WEBAPP_BASE_URL}?contact_id=${contactId}&conversation_id=${conversationId ?? ''}`;
       const keyboard = new InlineKeyboard().webApp('🔑 Iniciar sesión', webappUrl);
       await ctx.reply('Para usar los departamentos primero debes iniciar sesión.', { reply_markup: keyboard });
