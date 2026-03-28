@@ -1,6 +1,10 @@
 import { FastifyPluginAsync } from 'fastify';
+import { AxiosError } from 'axios';
+import { InlineKeyboard } from 'grammy';
 import { chatwootService } from '../services/chatwoot.service.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
+import { bot } from '../services/telegram.service.js';
+import { TEAMS } from '../services/department-menu.js';
 import { logger } from '../utils/logger.js';
 
 interface RegisterBody {
@@ -139,8 +143,10 @@ const WEBAPP_HTML = `<!DOCTYPE html>
                     tg.showAlert('Sesión iniciada correctamente. ¡Bienvenido a Xetux!');
                     setTimeout(function() { tg.close(); }, 1500);
                 } else {
-                    res.text().then(function(t) {
-                        tg.showAlert('Error: ' + t);
+                    res.json().then(function(j) {
+                        tg.showAlert('Error: ' + (j.error || 'Error desconocido'));
+                    }).catch(function() {
+                        tg.showAlert('Error al procesar el registro');
                     });
                 }
             })
@@ -163,41 +169,78 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.post<{ Body: RegisterBody }>('/api/webapp/register', async (request, reply) => {
     const { nombre, telefono, email, xetux_id, contact_id, conversation_id, telegram_user } = request.body;
 
-    return withExecutionLog(
-      {
-        eventType: 'webapp:register',
-        source: 'webapp',
-        direction: 'inbound',
-        inputData: request.body,
-        conversationId: conversation_id,
-        contactId: contact_id,
-        metadata: { xetux_id, telegram_user_id: telegram_user?.id ?? null },
-      },
-      async () => {
-        const contactIdNum = parseInt(contact_id, 10);
-        const conversationIdNum = parseInt(conversation_id, 10);
+    if (!contact_id || !conversation_id) {
+      reply.code(400);
+      return { error: 'contact_id y conversation_id son obligatorios' };
+    }
 
-        // Update Chatwoot contact if we have a valid contact_id
-        if (contactIdNum) {
+    try {
+      return await withExecutionLog(
+        {
+          eventType: 'webapp:register',
+          source: 'webapp',
+          direction: 'inbound',
+          inputData: request.body,
+          conversationId: conversation_id,
+          contactId: contact_id,
+          metadata: { xetux_id, telegram_user_id: telegram_user?.id ?? null },
+        },
+        async () => {
+          const contactIdNum = parseInt(contact_id, 10);
+          const conversationIdNum = parseInt(conversation_id, 10);
+
+          if (!contactIdNum || !conversationIdNum) {
+            throw new Error('contact_id y conversation_id deben ser números válidos');
+          }
+
+          // Update Chatwoot contact
           await chatwootService.updateContact(contactIdNum, {
             name: nombre,
             email,
             phone_number: telefono,
             custom_attributes: { xetux_id },
           });
-        }
 
-        // Send confirmation message in the conversation
-        if (conversationIdNum) {
+          // Send confirmation message in the conversation
           await chatwootService.sendMessage(conversationIdNum, {
             content: `✅ Registro completado:\n• Nombre: ${nombre}\n• Teléfono: ${telefono}\n• Email: ${email}\n• Xetux ID: ${xetux_id}`,
             message_type: 'outgoing',
           });
-        }
 
-        logger.info({ contactId: contact_id, conversationId: conversation_id, xetux_id }, 'WebApp registration completed');
-        return { success: true };
-      },
-    );
+          // Send department selection menu via Telegram
+          if (telegram_user?.id) {
+            const country = xetux_id.toUpperCase().startsWith('MX') ? 'mx' : 've';
+            const keyboard = new InlineKeyboard()
+              .text('💼 Consultoría', `team:${country === 'mx' ? TEAMS.CONSULTORIA_MX : TEAMS.CONSULTORIA_VE}:Consultoría`)
+              .text('🛠 Soporte', `team:${country === 'mx' ? TEAMS.SOPORTE_MX : TEAMS.SOPORTE_VE}:Soporte`)
+              .row()
+              .text('🛒 Ventas', `team:${TEAMS.VENTAS}:Ventas`)
+              .text('📋 Administración', `team:${TEAMS.ADMINISTRACION}:Administración`);
+
+            const deptMsg = await bot.api.sendMessage(
+              telegram_user.id,
+              '¿Con qué departamento deseas comunicarte?',
+              { reply_markup: keyboard },
+            );
+
+            await chatwootService.sendMessage(conversationIdNum, {
+              content: '¿Con qué departamento deseas comunicarte?\n\n💼 Consultoría | 🛠 Soporte | 🛒 Ventas | 📋 Administración',
+              message_type: 'outgoing',
+              source_id: String(deptMsg.message_id),
+            });
+          }
+
+          logger.info({ contactId: contact_id, conversationId: conversation_id, xetux_id }, 'WebApp registration completed');
+          return { success: true };
+        },
+      );
+    } catch (err) {
+      const axiosErr = err instanceof AxiosError ? err : null;
+      const chatwootMsg = axiosErr?.response?.data?.message || axiosErr?.response?.data?.error;
+      const message = chatwootMsg || (err instanceof Error ? err.message : 'Error desconocido');
+      logger.error({ err, contactId: contact_id, conversationId: conversation_id }, 'WebApp registration failed');
+      reply.code(422);
+      return { error: message };
+    }
   });
 };

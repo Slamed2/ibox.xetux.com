@@ -134,6 +134,52 @@ bot.on('message:text', async (ctx) => {
   );
 });
 
+// Handle inline button callbacks (department selection after registration)
+bot.on('callback_query:data', async (ctx) => {
+  const data = ctx.callbackQuery.data;
+  const userId = ctx.from.id;
+
+  if (data.startsWith('team:')) {
+    const parts = data.split(':');
+    const teamId = parseInt(parts[1], 10);
+    const teamLabel = parts[2] ?? '';
+
+    await withExecutionLog(
+      {
+        eventType: 'telegram:dept_callback',
+        source: 'telegram_webhook',
+        direction: 'inbound',
+        inputData: { userId, data },
+        contactId: String(userId),
+        metadata: { teamId, teamLabel, username: ctx.from?.username ?? null },
+      },
+      async () => {
+        await ctx.answerCallbackQuery();
+
+        const conversationId = await chatwootService.findConversationByTelegramUserId(userId);
+
+        if (conversationId) {
+          await chatwootService.assignConversation(conversationId, { team_id: teamId });
+          await chatwootService.sendMessage(conversationId, {
+            content: `📌 Departamento seleccionado: ${teamLabel}`,
+            message_type: 'outgoing',
+          });
+        }
+
+        // Edit the original message to show selection (remove buttons)
+        await ctx.editMessageText(`✅ Tu conversación fue asignada a *${teamLabel}*.\n\nUn agente te atenderá pronto.`, {
+          parse_mode: 'Markdown',
+        });
+
+        return { action: 'team_assigned_callback', teamId, teamLabel, conversationId };
+      },
+    );
+    return;
+  }
+
+  await ctx.answerCallbackQuery();
+});
+
 // Handle non-text messages
 bot.on('message', async (ctx) => {
   await withExecutionLog(
