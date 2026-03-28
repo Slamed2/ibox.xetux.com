@@ -46,12 +46,14 @@ const WEBAPP_HTML = `<!DOCTYPE html>
         .error-text { color: #e53935; font-size: 12px; margin-top: 4px; display: none; }
         .error-text.visible { display: block; }
         .label-row { display: flex; align-items: center; gap: 6px; }
-        .help-icon { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: #e1983d; color: #000; font-size: 12px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
-        .tooltip-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); z-index: 100; padding: 20px; justify-content: center; align-items: center; flex-direction: column; }
+        .help-icon { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #e1983d; color: #000; font-size: 11px; font-weight: 700; cursor: pointer; flex-shrink: 0; position: relative; top: -1px; }
+        .tooltip-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.92); z-index: 100; justify-content: center; align-items: center; flex-direction: column; overflow: hidden; touch-action: none; }
         .tooltip-overlay.visible { display: flex; }
-        .tooltip-overlay img { max-width: 100%; max-height: 60vh; border-radius: 10px; margin-bottom: 16px; }
-        .tooltip-overlay p { color: #fff; font-size: 14px; text-align: center; max-width: 300px; line-height: 1.5; }
-        .tooltip-overlay .close-btn { margin-top: 16px; padding: 8px 24px; background: #e1983d; color: #000; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+        .tooltip-img-container { width: 100%; flex: 1; display: flex; justify-content: center; align-items: center; overflow: hidden; touch-action: pinch-zoom; }
+        .tooltip-img-container img { max-width: 90%; max-height: 65vh; border-radius: 10px; transform-origin: center center; transition: transform 0.1s ease; }
+        .tooltip-bottom { padding: 16px 20px; text-align: center; flex-shrink: 0; }
+        .tooltip-bottom p { color: #fff; font-size: 14px; max-width: 300px; line-height: 1.5; margin: 0 auto 12px; }
+        .tooltip-bottom .close-btn { padding: 10px 32px; background: #e1983d; color: #000; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -88,9 +90,13 @@ const WEBAPP_HTML = `<!DOCTYPE html>
         </form>
     </div>
     <div class="tooltip-overlay" id="xetux-tooltip">
-        <img src="/webapp/xetux-id-help.png" alt="Donde encontrar tu Xetux ID">
-        <p>Tu Xetux ID se encuentra en la pantalla principal de la app Xetux, en el campo marcado como "XETUX ID".</p>
-        <button class="close-btn" id="close-tooltip">Entendido</button>
+        <div class="tooltip-img-container" id="img-container">
+            <img src="/webapp/xetux-id-help.png" alt="Donde encontrar tu Xetux ID" id="tooltip-img">
+        </div>
+        <div class="tooltip-bottom">
+            <p>Tu Xetux ID se encuentra en la pantalla principal de la app Xetux, en el campo marcado como "XETUX ID".</p>
+            <button class="close-btn" id="close-tooltip">Entendido</button>
+        </div>
     </div>
     <script>
         var tg = window.Telegram.WebApp;
@@ -111,15 +117,79 @@ const WEBAPP_HTML = `<!DOCTYPE html>
             document.getElementById('xetux_id').value = prefillXetuxId;
         }
 
-        // Tooltip handlers
+        // Tooltip handlers with pinch-to-zoom
+        var tooltipImg = document.getElementById('tooltip-img');
+        var currentScale = 1;
+        var startDist = 0;
+
+        function resetZoom() {
+            currentScale = 1;
+            tooltipImg.style.transform = 'scale(1)';
+        }
+
         document.getElementById('xetux-help').addEventListener('click', function() {
+            resetZoom();
             document.getElementById('xetux-tooltip').classList.add('visible');
         });
         document.getElementById('close-tooltip').addEventListener('click', function() {
             document.getElementById('xetux-tooltip').classList.remove('visible');
+            resetZoom();
         });
         document.getElementById('xetux-tooltip').addEventListener('click', function(e) {
-            if (e.target === this) this.classList.remove('visible');
+            if (e.target === this) {
+                this.classList.remove('visible');
+                resetZoom();
+            }
+        });
+
+        // Pinch-to-zoom on the image
+        var imgContainer = document.getElementById('img-container');
+        imgContainer.addEventListener('touchstart', function(e) {
+            if (e.touches.length === 2) {
+                e.preventDefault();
+                startDist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+            }
+        }, { passive: false });
+
+        imgContainer.addEventListener('touchmove', function(e) {
+            if (e.touches.length === 2) {
+                e.preventDefault();
+                var dist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                var scale = currentScale * (dist / startDist);
+                scale = Math.min(Math.max(scale, 1), 4);
+                tooltipImg.style.transform = 'scale(' + scale + ')';
+            }
+        }, { passive: false });
+
+        imgContainer.addEventListener('touchend', function(e) {
+            if (e.touches.length < 2) {
+                var transform = tooltipImg.style.transform;
+                var match = transform.match(/scale\\(([\\d.]+)\\)/);
+                currentScale = match ? parseFloat(match[1]) : 1;
+                if (currentScale < 1.1) resetZoom();
+            }
+        });
+
+        // Double tap to zoom
+        var lastTap = 0;
+        imgContainer.addEventListener('touchend', function(e) {
+            if (e.touches.length > 0) return;
+            var now = Date.now();
+            if (now - lastTap < 300) {
+                if (currentScale > 1.1) {
+                    resetZoom();
+                } else {
+                    currentScale = 2.5;
+                    tooltipImg.style.transform = 'scale(2.5)';
+                }
+            }
+            lastTap = now;
         });
 
         // Auto-format Xetux ID: uppercase, 2 letters (MX/VE) + 5 digits, no dash
