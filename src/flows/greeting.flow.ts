@@ -27,7 +27,18 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
 
   const contact = conversation.contact;
   const xetuxId = contact?.custom_attributes?.xetux_id as string | undefined;
-  const telegramUserId = contact?.additional_attributes?.social_telegram_user_id as number | undefined;
+
+  // Try multiple paths to find the Telegram user ID
+  const telegramUserId = (
+    contact?.additional_attributes?.social_telegram_user_id ??
+    (conversation as any)?.meta?.sender?.additional_attributes?.social_telegram_user_id ??
+    (payload as any)?.sender?.additional_attributes?.social_telegram_user_id ??
+    contact?.identifier
+  ) as number | string | undefined;
+
+  const telegramUserIdNum = telegramUserId ? Number(telegramUserId) : undefined;
+
+  logger.info({ telegramUserId, telegramUserIdNum, xetuxId, contactId: contact?.id, identifier: contact?.identifier }, 'Greeting flow: extracted user data');
 
   await withExecutionLog(
     {
@@ -37,7 +48,7 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
       inputData: payload,
       conversationId: String(conversation.id),
       contactId: String(contact?.id),
-      metadata: { xetuxId: xetuxId ?? null, telegramUserId: telegramUserId ?? null },
+      metadata: { xetuxId: xetuxId ?? null, telegramUserId: telegramUserIdNum ?? null },
     },
     async () => {
       let messageSent: string;
@@ -45,11 +56,11 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
 
       if (!xetuxId) {
         // No xetux_id: send welcome with webapp button via Telegram
-        if (telegramUserId) {
+        if (telegramUserIdNum) {
           const keyboard = new InlineKeyboard()
             .webApp('Iniciar sesión', WEBAPP_URL);
 
-          const sentMsg = await bot.api.sendMessage(telegramUserId, WELCOME_MESSAGE_NO_XETUX_ID, {
+          const sentMsg = await bot.api.sendMessage(telegramUserIdNum, WELCOME_MESSAGE_NO_XETUX_ID, {
             reply_markup: keyboard,
           });
           telegramMessageId = sentMsg.message_id;
@@ -64,6 +75,7 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
             source_id: String(telegramMessageId),
           });
         } else {
+          logger.warn({ conversationId: conversation.id }, 'No Telegram user ID found, sending via Chatwoot only');
           // Not a Telegram conversation, send via Chatwoot only
           await chatwootService.sendMessage(conversation.id, {
             content: WELCOME_MESSAGE_NO_XETUX_ID + `\n\n🔗 ${WEBAPP_URL}`,
@@ -73,8 +85,8 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
         messageSent = 'welcome_no_xetux_id';
       } else {
         // Has xetux_id: send simple greeting
-        if (telegramUserId) {
-          const sentMsg = await bot.api.sendMessage(telegramUserId, WELCOME_MESSAGE_WITH_XETUX_ID);
+        if (telegramUserIdNum) {
+          const sentMsg = await bot.api.sendMessage(telegramUserIdNum, WELCOME_MESSAGE_WITH_XETUX_ID);
           telegramMessageId = sentMsg.message_id;
 
           await chatwootService.sendMessage(conversation.id, {
@@ -86,6 +98,7 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
             source_id: String(telegramMessageId),
           });
         } else {
+          logger.warn({ conversationId: conversation.id }, 'No Telegram user ID found, sending via Chatwoot only');
           await chatwootService.sendMessage(conversation.id, {
             content: WELCOME_MESSAGE_WITH_XETUX_ID,
             message_type: 'outgoing',
