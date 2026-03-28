@@ -1,6 +1,5 @@
 import { chatwootService } from '../services/chatwoot.service.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
-import { maybeGreetOnFirstMessage } from './greeting.flow.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { logger } from '../utils/logger.js';
 
@@ -33,12 +32,6 @@ export async function handleMessageCreated(payload: ChatwootWebhookPayload) {
       // Skip outgoing messages and bot messages to avoid loops
       if (isOutgoing || isBot) {
         return { action: 'skipped', reason: isBot ? 'bot_message' : 'outgoing_message' };
-      }
-
-      // Check if this is the first message — trigger greeting if so
-      const greeted = await maybeGreetOnFirstMessage(payload);
-      if (greeted) {
-        return { action: 'greeting_sent' };
       }
 
       // Skip if conversation already has a team assigned

@@ -24,16 +24,6 @@ try {
 
 const app = Fastify({ logger: false });
 
-// Store raw body for HMAC signature verification
-app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
-  (req as any).rawBody = body;
-  try {
-    done(null, JSON.parse(body as string));
-  } catch (err) {
-    done(err as Error, undefined);
-  }
-});
-
 // Plugins
 await app.register(healthPlugin);
 await app.register(chatwootPlugin, { prefix: '/webhook' });
