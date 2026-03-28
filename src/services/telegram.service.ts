@@ -9,7 +9,7 @@ export const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 const WELCOME_MESSAGE = '¡Hola! 👋 Bienvenido a nuestro servicio de atención.\n\n' +
   'Escribe tu consulta y un agente te atenderá lo antes posible.';
 
-// /start command
+// /start command — reply via grammY, then sync to Chatwoot with message_id
 bot.command('start', async (ctx) => {
   const userId = ctx.from?.id;
   const chatId = ctx.chat.id;
@@ -23,20 +23,26 @@ bot.command('start', async (ctx) => {
       contactId: String(userId),
     },
     async () => {
-      await ctx.reply(WELCOME_MESSAGE);
+      // 1. Reply via grammY (supports buttons, formatting, etc.)
+      const sentMessage = await ctx.reply(WELCOME_MESSAGE);
+      const telegramMessageId = sentMessage.message_id;
 
-      // Wait for Chatwoot to process the forwarded webhook and create the conversation
+      // 2. Wait for Chatwoot to process the forwarded webhook
       await delay(3000);
 
-      // Sync the bot reply to Chatwoot
-      const synced = await chatwootService.sendMessageByTelegramUserId(userId!, WELCOME_MESSAGE);
+      // 3. Sync to Chatwoot WITH the message_id so it doesn't re-send
+      const synced = await chatwootService.sendMessageByTelegramUserId(
+        userId!,
+        WELCOME_MESSAGE,
+        telegramMessageId,
+      );
 
-      return { replied: true, syncedToChatwoot: synced };
+      return { replied: true, telegramMessageId, syncedToChatwoot: synced };
     },
   );
 });
 
-// Log all other messages
+// Log all other messages (don't reply, let Chatwoot agents handle)
 bot.on('message', async (ctx) => {
   const userId = ctx.from?.id;
   logger.info({ chatId: ctx.chat.id, userId, text: ctx.message.text }, 'Telegram message received');
@@ -58,11 +64,21 @@ export async function setupTelegramWebhook(webhookUrl: string) {
   logger.info({ webhookUrl }, 'Telegram webhook configured');
 }
 
+/**
+ * Send a message via grammY and sync to Chatwoot with the message_id.
+ * This prevents Chatwoot from re-sending it through the Telegram channel.
+ */
 export async function sendTelegramMessage(chatId: number | string, text: string) {
   const result = await bot.api.sendMessage(chatId, text);
-  // Also sync to Chatwoot
-  chatwootService.sendMessageByTelegramUserId(Number(chatId), text).catch((err) => {
+
+  // Sync to Chatwoot with message_id
+  chatwootService.sendMessageByTelegramUserId(
+    Number(chatId),
+    text,
+    result.message_id,
+  ).catch((err) => {
     logger.error({ err: err.message }, 'Failed to sync Telegram message to Chatwoot');
   });
+
   return result;
 }

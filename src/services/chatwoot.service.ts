@@ -128,20 +128,37 @@ class ChatwootService {
   }
 
   /**
-   * Send a bot reply to Chatwoot, finding the conversation by Telegram user ID
+   * Send a bot reply to Chatwoot, finding the conversation by Telegram user ID.
+   * Includes the Telegram message_id as source_id so Chatwoot doesn't re-send it.
    */
-  async sendMessageByTelegramUserId(telegramUserId: number, content: string): Promise<boolean> {
+  async sendMessageByTelegramUserId(
+    telegramUserId: number,
+    content: string,
+    telegramMessageId?: number,
+  ): Promise<boolean> {
     const conversationId = await this.findConversationByTelegramUserId(telegramUserId);
     if (!conversationId) {
       logger.warn({ telegramUserId }, 'No Chatwoot conversation found for Telegram user');
       return false;
     }
 
-    await this.sendMessage(conversationId, {
+    const payload: ChatwootSendMessagePayload = {
       content,
       message_type: 'outgoing',
-    });
-    logger.info({ telegramUserId, conversationId }, 'Bot reply synced to Chatwoot');
+    };
+
+    // Include source_id so Chatwoot knows this message was already sent via Telegram
+    if (telegramMessageId) {
+      payload.content_attributes = {
+        external_created_at: new Date().toISOString(),
+        in_reply_to_external_id: null,
+      };
+      // source_id goes at the top level of the payload
+      (payload as any).source_id = String(telegramMessageId);
+    }
+
+    await this.sendMessage(conversationId, payload);
+    logger.info({ telegramUserId, conversationId, telegramMessageId }, 'Bot reply synced to Chatwoot');
     return true;
   }
 }
