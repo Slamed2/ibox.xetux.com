@@ -237,6 +237,9 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
             });
           }
 
+          // Add country label to conversation
+          await chatwootService.addLabels(conversationIdNum, [isMX ? 'mexico' : 'venezuela']);
+
           // Send registration details as internal note in Chatwoot
           await chatwootService.sendMessage(conversationIdNum, {
             content: `✅ Registro completado:\n• Nombre: ${nombre}\n• Teléfono: ${telefono}\n• Email: ${email}\n• Xetux ID: ${xetux_id}`,

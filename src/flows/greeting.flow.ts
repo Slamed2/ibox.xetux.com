@@ -40,6 +40,12 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
     async () => {
       const webappUrl = `${WEBAPP_BASE_URL}?contact_id=${contact?.id ?? ''}&conversation_id=${conversation.id}`;
 
+      // Add country label if we know it from xetux_id
+      if (xetuxId) {
+        const countryLabel = xetuxId.toUpperCase().startsWith('MX') ? 'mexico' : 'venezuela';
+        await chatwootService.addLabels(conversation.id, [countryLabel]);
+      }
+
       if (!telegramUserId) {
         const content = !xetuxId
           ? WELCOME_NO_XETUX + `\n\n🔗 ${webappUrl}\n\n${MENU_TEXT}`
