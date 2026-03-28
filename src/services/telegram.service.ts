@@ -2,18 +2,43 @@ import { Bot } from 'grammy';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { chatwootService } from './chatwoot.service.js';
+import { withExecutionLog } from './execution-log.service.js';
 
 export const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 
 // /start command — greeting is handled by Chatwoot conversation_created flow
 bot.command('start', async (ctx) => {
-  logger.info({ chatId: ctx.chat.id, from: ctx.from }, 'Telegram /start command received');
-  // Don't reply here — the greeting.flow.ts handles it when Chatwoot creates the conversation
+  await withExecutionLog(
+    {
+      eventType: 'telegram:command_start',
+      source: 'telegram_webhook',
+      direction: 'inbound',
+      inputData: { chatId: ctx.chat.id, from: ctx.from, text: ctx.message?.text },
+      contactId: String(ctx.from?.id),
+      metadata: { chatType: ctx.chat.type, username: ctx.from?.username ?? null },
+    },
+    async () => {
+      // Don't reply here — the greeting.flow.ts handles it when Chatwoot creates the conversation
+      return { handled: 'deferred_to_chatwoot_conversation_created' };
+    },
+  );
 });
 
 // Log all other messages
 bot.on('message', async (ctx) => {
-  logger.info({ chatId: ctx.chat.id, userId: ctx.from?.id, text: ctx.message.text }, 'Telegram message received');
+  await withExecutionLog(
+    {
+      eventType: 'telegram:message',
+      source: 'telegram_webhook',
+      direction: 'inbound',
+      inputData: { chatId: ctx.chat.id, from: ctx.from, messageId: ctx.message.message_id, text: ctx.message.text },
+      contactId: String(ctx.from?.id),
+      metadata: { chatType: ctx.chat.type, username: ctx.from?.username ?? null, contentType: ctx.message.text ? 'text' : 'other' },
+    },
+    async () => {
+      return { messageId: ctx.message.message_id, text: ctx.message.text ?? null };
+    },
+  );
 });
 
 // Handle errors

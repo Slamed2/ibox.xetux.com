@@ -15,20 +15,24 @@ export async function handleMessageCreated(payload: ChatwootWebhookPayload) {
   const conversation = payload.conversation;
   if (!message || !conversation) return;
 
-  // Skip outgoing messages and bot messages to avoid loops
-  if (message.message_type !== 'incoming') return;
-  if (message.sender?.type === 'agent_bot') return;
+  const isOutgoing = message.message_type !== 'incoming';
+  const isBot = message.sender?.type === 'agent_bot';
 
   await withExecutionLog(
     {
       eventType: 'chatwoot:message_created',
       source: 'chatwoot_webhook',
-      direction: 'inbound',
+      direction: isOutgoing ? 'outbound' : 'inbound',
       inputData: payload,
       conversationId: String(conversation.id),
       contactId: String(conversation.contact?.id),
+      metadata: { messageType: message.message_type, senderType: message.sender?.type ?? null },
     },
     async () => {
+      // Skip outgoing messages and bot messages to avoid loops
+      if (isOutgoing || isBot) {
+        return { action: 'skipped', reason: isBot ? 'bot_message' : 'outgoing_message' };
+      }
       // Skip if conversation already has a team assigned
       if (conversation.team_id) {
         logger.debug({ conversationId: conversation.id }, 'Conversation already has team, skipping routing');

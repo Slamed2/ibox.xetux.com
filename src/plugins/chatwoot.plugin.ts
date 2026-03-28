@@ -4,6 +4,7 @@ import { handleConversationCreated } from '../flows/greeting.flow.js';
 import { handleMessageCreated } from '../flows/routing.flow.js';
 import { handleConversationResolved } from '../flows/closing.flow.js';
 import { handleConversationUpdated } from '../flows/assignment.flow.js';
+import { withExecutionLog } from '../services/execution-log.service.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { logger } from '../utils/logger.js';
 
@@ -41,7 +42,17 @@ export const chatwootPlugin: FastifyPluginAsync = async (fastify) => {
           break;
 
         default:
-          logger.debug({ event }, 'Unhandled Chatwoot event');
+          withExecutionLog(
+            {
+              eventType: `chatwoot:${event}`,
+              source: 'chatwoot_webhook',
+              direction: 'inbound',
+              inputData: payload,
+              conversationId: String(payload.conversation?.id ?? ''),
+              contactId: String(payload.conversation?.contact?.id ?? ''),
+            },
+            async () => ({ action: 'unhandled', event }),
+          ).catch(err => logger.error({ err, event }, 'Error logging unhandled event'));
       }
     } catch (err) {
       logger.error({ err, event }, 'Error dispatching Chatwoot event');
