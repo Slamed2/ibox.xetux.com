@@ -36,16 +36,63 @@ export function wasBotAssignment(conversationId: number): boolean {
 
 // /start command — greeting is handled by Chatwoot conversation_created flow
 bot.command('start', async (ctx) => {
+  const text = ctx.message?.text ?? '';
+  const userId = ctx.from?.id;
+
   await withExecutionLog(
     {
       eventType: 'telegram:command_start',
       source: 'telegram_webhook',
       direction: 'inbound',
-      inputData: { chatId: ctx.chat.id, from: ctx.from, text: ctx.message?.text },
-      contactId: String(ctx.from?.id),
+      inputData: { chatId: ctx.chat.id, from: ctx.from, text },
+      contactId: String(userId),
       metadata: { chatType: ctx.chat.type, username: ctx.from?.username ?? null },
     },
     async () => {
+      // Check for deep link: /start XETUXID=MX12345
+      const match = text.match(/XETUXID=([A-Za-z0-9-]+)/);
+      if (match && userId) {
+        const xetuxId = match[1].toUpperCase();
+        const isMX = xetuxId.startsWith('MX');
+        const country = isMX ? 'Mexico' : 'Venezuela';
+        const countryCode = isMX ? 'MX' : 'VE';
+
+        // Find conversation and contact in Chatwoot
+        const conversationId = await chatwootService.findConversationByTelegramUserId(userId);
+        const conversation = conversationId ? await chatwootService.getConversation(conversationId) : null;
+        const contactId = conversation?.contact?.id ?? conversation?.meta?.sender?.id;
+
+        if (contactId) {
+          // Update contact with xetux_id and country
+          await chatwootService.updateContact(contactId, {
+            additional_attributes: { country, country_code: countryCode },
+            custom_attributes: { xetux_id: xetuxId },
+          });
+
+          // Add country label
+          if (conversationId) {
+            await chatwootService.addLabels(conversationId, [isMX ? 'mexico' : 'venezuela']);
+          }
+
+          // Enable department commands
+          await enableUserCommands(userId);
+
+          // Send internal note
+          if (conversationId) {
+            await chatwootService.sendMessage(conversationId, {
+              content: `🔗 Xetux ID vinculado via deep link: ${xetuxId}`,
+              private: true,
+              message_type: 'outgoing',
+            });
+          }
+
+          logger.info({ userId, xetuxId, contactId, conversationId }, 'Xetux ID updated via deep link');
+          return { action: 'xetux_id_linked', xetuxId, contactId, conversationId };
+        }
+
+        return { action: 'deep_link_no_contact', xetuxId };
+      }
+
       return { handled: 'deferred_to_chatwoot_conversation_created' };
     },
   );
@@ -74,6 +121,27 @@ bot.command('registro', async (ctx) => {
       const webappUrl = `${WEBAPP_BASE_URL}?contact_id=${contactId}&conversation_id=${conversationId ?? ''}`;
       const keyboard = new InlineKeyboard().webApp('🔑 Iniciar sesión', webappUrl);
 
+      // Check if this is a new conversation (no messages yet or just the /start)
+      const isNewConversation = conversation && !conversation.team_id && conversation.messages_count <= 2;
+
+      if (isNewConversation) {
+        // New conversation: include greeting + login button
+        const greeting = '¡Bienvenido a Xetux! 🚀\n\nPara comenzar, inicia sesión tocando el botón de abajo.\nLuego usa el menú para seleccionar el departamento con el que deseas comunicarte.';
+        const sentMsg = await ctx.reply(greeting, { reply_markup: keyboard });
+
+        // Sync to Chatwoot
+        if (conversationId) {
+          await chatwootService.sendMessage(conversationId, {
+            content: greeting + `\n\n🔗 [Iniciar sesión](${webappUrl})`,
+            message_type: 'outgoing',
+            source_id: String(sentMsg.message_id),
+          });
+        }
+
+        return { action: 'registro_with_greeting', conversationId, contactId };
+      }
+
+      // Existing conversation: just the login button
       await ctx.reply('Toca el botón para iniciar sesión:', { reply_markup: keyboard });
       return { action: 'registro_button_sent', conversationId, contactId };
     },

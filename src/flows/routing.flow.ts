@@ -34,6 +34,12 @@ export async function handleMessageCreated(payload: ChatwootWebhookPayload) {
         return { action: 'skipped', reason: isBot ? 'bot_message' : 'outgoing_message' };
       }
 
+      // Delete callback data messages (e.g. "team:7:Administración") from Chatwoot
+      if (message.content?.startsWith('team:') && message.id) {
+        await chatwootService.deleteMessage(conversation.id, message.id as number);
+        return { action: 'callback_message_deleted', content: message.content };
+      }
+
       // Skip if conversation already has a team assigned
       if (conversation.team_id) {
         logger.debug({ conversationId: conversation.id }, 'Conversation already has team, skipping routing');

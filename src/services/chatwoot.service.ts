@@ -31,6 +31,11 @@ class ChatwootService {
     return data;
   }
 
+  async deleteMessage(conversationId: number, messageId: number) {
+    logger.debug({ conversationId, messageId }, 'Deleting message in Chatwoot');
+    await this.client.delete(`/conversations/${conversationId}/messages/${messageId}`);
+  }
+
   async updateMessage(conversationId: number, messageId: number, content: string) {
     logger.debug({ conversationId, messageId }, 'Updating message in Chatwoot');
     const { data } = await this.client.patch(
