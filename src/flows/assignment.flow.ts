@@ -18,12 +18,16 @@ export async function handleConversationUpdated(payload: ChatwootWebhookPayload)
   const conversation = payload.conversation;
   if (!conversation) return;
 
-  // Chatwoot sends changed_attributes as { attribute_name: { previous_value, current_value } }
-  const changes = payload.changed_attributes as unknown as Record<string, { previous_value: unknown; current_value: unknown }> | undefined;
-  if (!changes?.team_id) return;
+  // Chatwoot sends changed_attributes as an array of objects:
+  // [{ updated_at: { previous_value, current_value } }, { team_id: { previous_value, current_value } }]
+  const changedAttrs = payload.changed_attributes as unknown as Array<Record<string, { previous_value: unknown; current_value: unknown }>> | undefined;
+  if (!changedAttrs || !Array.isArray(changedAttrs)) return;
 
-  const previousTeamId = changes.team_id.previous_value as number | null;
-  const currentTeamId = changes.team_id.current_value as number | null;
+  const teamChange = changedAttrs.find((attr) => 'team_id' in attr);
+  if (!teamChange) return;
+
+  const previousTeamId = teamChange.team_id.previous_value as number | null;
+  const currentTeamId = teamChange.team_id.current_value as number | null;
 
   if (previousTeamId === currentTeamId) return;
 
