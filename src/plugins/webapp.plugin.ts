@@ -219,7 +219,7 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
 
   // Serve help image for Xetux ID tooltip
   fastify.get('/webapp/xetux-id-help.png', async (_request, reply) => {
-    const imgPath = path.resolve(__dirname, '../assets/xetux-id-help.png');
+    const imgPath = path.resolve(process.cwd(), 'src/assets/xetux-id-help.png');
     if (fs.existsSync(imgPath)) {
       const img = fs.readFileSync(imgPath);
       reply.type('image/jpeg').send(img);

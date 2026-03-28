@@ -24,6 +24,7 @@ RUN npm install --omit=dev && npm cache clean --force
 
 COPY --from=backend-build /app/dist ./dist
 COPY src/db/migrations ./dist/db/migrations
+COPY src/assets ./src/assets
 COPY --from=dashboard-build /app/dashboard/dist ./public
 
 ENV NODE_ENV=production
