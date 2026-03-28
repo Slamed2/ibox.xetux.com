@@ -16,6 +16,21 @@ export const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 // Track pending department selection per user (waiting for country)
 const pendingDepartment = new Map<number, string>();
 
+// Track recent bot-initiated team assignments to avoid duplicate notifications
+// Key: conversationId, Value: timestamp — expires after 10 seconds
+const recentBotAssignments = new Map<number, number>();
+
+export function wasBotAssignment(conversationId: number): boolean {
+  const ts = recentBotAssignments.get(conversationId);
+  if (!ts) return false;
+  if (Date.now() - ts > 10_000) {
+    recentBotAssignments.delete(conversationId);
+    return false;
+  }
+  recentBotAssignments.delete(conversationId);
+  return true;
+}
+
 // /start command — greeting is handled by Chatwoot conversation_created flow
 bot.command('start', async (ctx) => {
   await withExecutionLog(
@@ -159,11 +174,8 @@ bot.on('callback_query:data', async (ctx) => {
         const conversationId = await chatwootService.findConversationByTelegramUserId(userId);
 
         if (conversationId) {
+          recentBotAssignments.set(conversationId, Date.now());
           await chatwootService.assignConversation(conversationId, { team_id: teamId });
-          await chatwootService.sendMessage(conversationId, {
-            content: `📌 Departamento seleccionado: ${teamLabel} (Conversación #${conversationId})`,
-            message_type: 'outgoing',
-          });
         }
 
         // Edit the original message to show selection (remove buttons)
@@ -204,12 +216,8 @@ async function assignTeamAndConfirm(ctx: any, telegramUserId: number, teamId: nu
   const conversationId = await chatwootService.findConversationByTelegramUserId(telegramUserId);
 
   if (conversationId) {
+    recentBotAssignments.set(conversationId, Date.now());
     await chatwootService.assignConversation(conversationId, { team_id: teamId });
-
-    await chatwootService.sendMessage(conversationId, {
-      content: `📌 Departamento seleccionado: ${teamLabel} (Conversación #${conversationId})`,
-      message_type: 'outgoing',
-    });
   } else {
     logger.warn({ telegramUserId }, 'No Chatwoot conversation found for team assignment');
   }
