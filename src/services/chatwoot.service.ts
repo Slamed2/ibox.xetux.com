@@ -153,8 +153,7 @@ class ChatwootService {
         external_created_at: new Date().toISOString(),
         in_reply_to_external_id: null,
       };
-      // source_id goes at the top level of the payload
-      (payload as any).source_id = String(telegramMessageId);
+      payload.source_id = String(telegramMessageId);
     }
 
     await this.sendMessage(conversationId, payload);

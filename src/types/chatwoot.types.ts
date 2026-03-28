@@ -14,6 +14,7 @@ export interface ChatwootContact {
   phone_number?: string;
   identifier?: string;
   custom_attributes: Record<string, unknown>;
+  additional_attributes?: Record<string, unknown>;
 }
 
 export interface ChatwootConversation {
@@ -69,6 +70,7 @@ export interface ChatwootSendMessagePayload {
   private?: boolean;
   content_type?: string;
   content_attributes?: Record<string, unknown>;
+  source_id?: string;
 }
 
 export interface ChatwootAssignPayload {
