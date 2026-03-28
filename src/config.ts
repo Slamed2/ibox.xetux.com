@@ -14,5 +14,6 @@ export const config = cleanEnv(process.env, {
   // Chatwoot
   CHATWOOT_BASE_URL: str(),
   CHATWOOT_API_TOKEN: str(),
+  CHATWOOT_WEBHOOK_SECRET: str(),
   CHATWOOT_ACCOUNT_ID: num(),
 });

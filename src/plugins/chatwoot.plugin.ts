@@ -1,4 +1,5 @@
 import { FastifyPluginAsync } from 'fastify';
+import { verifyChatwootSignature } from '../middleware/signature-verify.js';
 import { handleConversationCreated } from '../flows/greeting.flow.js';
 import { handleMessageCreated } from '../flows/routing.flow.js';
 import { handleConversationResolved } from '../flows/closing.flow.js';
@@ -8,7 +9,7 @@ import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { logger } from '../utils/logger.js';
 
 export const chatwootPlugin: FastifyPluginAsync = async (fastify) => {
-  fastify.post('/chatwoot', async (request, reply) => {
+  fastify.post('/chatwoot', { preHandler: verifyChatwootSignature }, async (request, reply) => {
     const payload = request.body as ChatwootWebhookPayload & Record<string, unknown>;
     const event = payload.event;
 
