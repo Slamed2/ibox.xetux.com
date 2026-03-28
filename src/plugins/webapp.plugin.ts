@@ -67,8 +67,8 @@ const WEBAPP_HTML = `<!DOCTYPE html>
             </div>
             <div class="form-group">
                 <label for="xetux_id">Xetux ID *</label>
-                <input type="text" id="xetux_id" placeholder="Ej: VE1234 o MX123" required>
-                <div class="error-text" id="xetux_id-error">Debe ser MX/VE + números (sin espacios)</div>
+                <input type="text" id="xetux_id" placeholder="Ej: VE-1234 o MX-123" required autocapitalize="characters">
+                <div class="error-text" id="xetux_id-error">Formato: MX-123456 o VE-123456</div>
             </div>
         </form>
     </div>
@@ -84,6 +84,20 @@ const WEBAPP_HTML = `<!DOCTYPE html>
         var params = new URLSearchParams(window.location.search);
         var contactId = params.get('contact_id');
         var conversationId = params.get('conversation_id');
+
+        // Auto-format Xetux ID: uppercase + insert dash after MX/VE
+        document.getElementById('xetux_id').addEventListener('input', function() {
+            var val = this.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+            // Insert dash after MX or VE if followed by a digit
+            if (/^(MX|VE)\\d/.test(val) && val.charAt(2) !== '-') {
+                val = val.slice(0, 2) + '-' + val.slice(2);
+            }
+            // Remove any dash that's not in position 2
+            var prefix = val.slice(0, 3);
+            var rest = val.slice(3).replace(/-/g, '');
+            val = prefix + rest;
+            this.value = val;
+        });
 
         function validate() {
             var valid = true;
@@ -110,7 +124,7 @@ const WEBAPP_HTML = `<!DOCTYPE html>
                 valid = false;
             }
             var xetux_id = document.getElementById('xetux_id');
-            var regex = /^(?:MX|VE)\\d+$/;
+            var regex = /^(?:MX|VE)-\\d+$/;
             if (!regex.test(xetux_id.value.trim())) {
                 xetux_id.classList.add('error');
                 document.getElementById('xetux_id-error').classList.add('visible');
