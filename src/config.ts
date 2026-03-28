@@ -18,4 +18,8 @@ export const config = cleanEnv(process.env, {
 
   // OpenAI
   OPENAI_API_KEY: str(),
+
+  // Log retention
+  LOG_RETENTION_DAYS: num({ default: 30 }),
+  LOG_CLEANUP_INTERVAL_HOURS: num({ default: 24 }),
 });

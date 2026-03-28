@@ -1,6 +1,6 @@
 import { db } from '../db/connection.js';
 import { executionLogs } from '../db/schema.js';
-import { eq, desc, and, gte, lte, sql, count, avg, or, ilike } from 'drizzle-orm';
+import { eq, desc, and, gte, lte, lt, sql, count, avg, or, ilike, ne } from 'drizzle-orm';
 import type { CreateExecutionLog, ExecutionLogResult, LogFilters, LogStats } from '../types/execution-log.types.js';
 import { logger } from '../utils/logger.js';
 
@@ -160,4 +160,28 @@ export async function getLogStats(): Promise<LogStats> {
     byEventType,
     avgDurationMs: Number(totals.avgDurationMs ?? 0),
   };
+}
+
+export async function cleanupOldLogs(retentionDays: number): Promise<number> {
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
+
+  // Error logs are kept twice as long for debugging
+  const errorCutoffDate = new Date();
+  errorCutoffDate.setDate(errorCutoffDate.getDate() - retentionDays * 2);
+
+  const result = await db.delete(executionLogs)
+    .where(
+      or(
+        and(lt(executionLogs.createdAt, cutoffDate), ne(executionLogs.status, 'error')),
+        and(lt(executionLogs.createdAt, errorCutoffDate), eq(executionLogs.status, 'error')),
+      ),
+    )
+    .returning({ id: executionLogs.id });
+
+  const deleted = result.length;
+  if (deleted > 0) {
+    logger.info({ deleted, retentionDays, cutoffDate, errorCutoffDate }, 'Old execution logs cleaned up');
+  }
+  return deleted;
 }

@@ -10,6 +10,7 @@ import { chatwootPlugin } from './plugins/chatwoot.plugin.js';
 import { telegramPlugin } from './plugins/telegram.plugin.js';
 import { dashboardPlugin } from './plugins/dashboard.plugin.js';
 import { webappPlugin } from './plugins/webapp.plugin.js';
+import { cleanupOldLogs } from './services/execution-log.service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -40,6 +41,18 @@ const shutdown = async (signal: string) => {
 };
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+// Log cleanup scheduler
+const runCleanup = async () => {
+  try {
+    const deleted = await cleanupOldLogs(config.LOG_RETENTION_DAYS);
+    if (deleted > 0) logger.info({ deleted, retentionDays: config.LOG_RETENTION_DAYS }, 'Scheduled log cleanup completed');
+  } catch (err) {
+    logger.error(err, 'Scheduled log cleanup failed');
+  }
+};
+runCleanup(); // Run on startup
+setInterval(runCleanup, config.LOG_CLEANUP_INTERVAL_HOURS * 60 * 60 * 1000);
 
 // Start
 try {

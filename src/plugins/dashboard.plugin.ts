@@ -3,7 +3,8 @@ import fastifyStatic from '@fastify/static';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { queryLogs, getLogById, getLogStats } from '../services/execution-log.service.js';
+import { queryLogs, getLogById, getLogStats, cleanupOldLogs } from '../services/execution-log.service.js';
+import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -48,6 +49,11 @@ export const dashboardPlugin: FastifyPluginAsync = async (fastify) => {
 
   fastify.get('/api/logs/stats', async () => {
     return getLogStats();
+  });
+
+  fastify.post('/api/logs/cleanup', async () => {
+    const deleted = await cleanupOldLogs(config.LOG_RETENTION_DAYS);
+    return { deleted, retentionDays: config.LOG_RETENTION_DAYS };
   });
 
   // Serve dashboard static files (only if public dir exists)
