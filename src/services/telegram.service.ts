@@ -195,16 +195,29 @@ async function handleDepartmentCommand(ctx: any, command: string, displayName: s
       metadata: { command, username: ctx.from?.username ?? null },
     },
     async () => {
-      // All departments need country selection
-      if (COUNTRY_COMMANDS[command]) {
-        pendingDepartment.set(userId, command);
-        await ctx.reply(`Has seleccionado ${displayName}.\n\n¿En qué país te encuentras?`, {
-          reply_markup: COUNTRY_KEYBOARD,
-        });
-        return { action: 'country_menu_shown', department: command };
+      if (!COUNTRY_COMMANDS[command]) {
+        return { action: 'unknown_command', command };
       }
 
-      return { action: 'unknown_command', command };
+      // Try to auto-resolve country from xetux_id
+      const conversationId = await chatwootService.findConversationByTelegramUserId(userId);
+      const conversation = conversationId ? await chatwootService.getConversation(conversationId) : null;
+      const xetuxId = conversation?.contact?.custom_attributes?.xetux_id as string | undefined;
+
+      if (xetuxId) {
+        const countryKey = xetuxId.toUpperCase().startsWith('MX') ? '🇲🇽 México' : '🇻🇪 Venezuela';
+        const match = COUNTRY_COMMANDS[command][countryKey];
+        if (match) {
+          return await assignTeamAndConfirm(ctx, userId, match.teamId, match.label);
+        }
+      }
+
+      // No xetux_id — fallback to country selection keyboard
+      pendingDepartment.set(userId, command);
+      await ctx.reply(`Has seleccionado ${displayName}.\n\n¿En qué país te encuentras?`, {
+        reply_markup: COUNTRY_KEYBOARD,
+      });
+      return { action: 'country_menu_shown', department: command };
     },
   );
 }
