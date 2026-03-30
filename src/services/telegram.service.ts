@@ -4,6 +4,9 @@ import { logger } from '../utils/logger.js';
 import { chatwootService } from './chatwoot.service.js';
 import { withExecutionLog } from './execution-log.service.js';
 import { InlineKeyboard } from 'grammy';
+import { db } from '../db/connection.js';
+import { botConfig } from '../db/schema.js';
+import { eq } from 'drizzle-orm';
 import {
   COUNTRY_COMMANDS,
   COUNTRY_KEYBOARD,
@@ -17,16 +20,54 @@ export const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 
 /**
  * Group migration map: oldGroupId → newSupergroupId.
+ * Persisted to the database (botConfig table) so it survives restarts.
  * When Telegram migrates a group to supergroup, the old ID stops working for API calls
  * but Telegram may still send webhook updates with the old ID.
- * We detect migrations via the `migrate_to_chat_id` field in Telegram updates
- * and rewrite the chat.id to the new supergroup ID before forwarding to Chatwoot.
  */
 const groupMigrations = new Map<number, number>();
+const DB_KEY = 'group_migrations';
+
+/** Load migrations from DB into memory on startup. */
+export async function loadGroupMigrations(): Promise<void> {
+  try {
+    const row = await db.select().from(botConfig).where(eq(botConfig.key, DB_KEY)).limit(1);
+    if (row.length > 0) {
+      const map = row[0].value as Record<string, number>;
+      for (const [oldId, newId] of Object.entries(map)) {
+        groupMigrations.set(Number(oldId), newId);
+      }
+      logger.info({ count: groupMigrations.size, migrations: map }, 'Group migrations loaded from DB');
+    } else {
+      logger.info('No group migrations found in DB');
+    }
+  } catch (err) {
+    logger.error({ err }, 'Failed to load group migrations from DB');
+  }
+}
+
+/** Save current in-memory migrations to DB. */
+async function saveGroupMigrations(): Promise<void> {
+  try {
+    const map: Record<string, number> = {};
+    for (const [oldId, newId] of groupMigrations) {
+      map[String(oldId)] = newId;
+    }
+    const existing = await db.select().from(botConfig).where(eq(botConfig.key, DB_KEY)).limit(1);
+    if (existing.length > 0) {
+      await db.update(botConfig).set({ value: map, updatedAt: new Date() }).where(eq(botConfig.key, DB_KEY));
+    } else {
+      await db.insert(botConfig).values({ key: DB_KEY, value: map, description: 'Telegram group→supergroup migration map' });
+    }
+  } catch (err) {
+    logger.error({ err }, 'Failed to save group migrations to DB');
+  }
+}
 
 export function registerGroupMigration(oldId: number, newId: number): void {
   groupMigrations.set(oldId, newId);
   logger.info({ oldId, newId }, 'Group migration registered');
+  // Persist async (fire-and-forget)
+  saveGroupMigrations();
 }
 
 export function getMigratedGroupId(chatId: number): number {
@@ -531,6 +572,9 @@ bot.catch((err) => {
 });
 
 export async function setupTelegramWebhook(webhookUrl: string) {
+  // Load persisted group migrations from DB
+  await loadGroupMigrations();
+
   // Clear all previous commands at every scope
   await bot.api.deleteMyCommands({ scope: { type: 'default' } });
   await bot.api.deleteMyCommands({ scope: { type: 'all_private_chats' } });

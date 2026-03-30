@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { queryLogs, getLogById, getLogStats, cleanupOldLogs } from '../services/execution-log.service.js';
+import { registerGroupMigration, getMigratedGroupId } from '../services/telegram.service.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 
@@ -56,6 +57,21 @@ export const dashboardPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.post('/api/logs/cleanup', async () => {
     const deleted = await cleanupOldLogs(config.LOG_RETENTION_DAYS);
     return { deleted, retentionDays: config.LOG_RETENTION_DAYS };
+  });
+
+  // Register a group migration (old group ID → new supergroup ID)
+  fastify.post<{ Body: { oldId: number; newId: number } }>('/api/migrations', async (request) => {
+    const { oldId, newId } = request.body;
+    if (!oldId || !newId) return { error: 'oldId and newId are required' };
+    registerGroupMigration(oldId, newId);
+    return { ok: true, oldId, newId };
+  });
+
+  // Check if a group ID has a migration
+  fastify.get<{ Params: { chatId: string } }>('/api/migrations/:chatId', async (request) => {
+    const chatId = Number(request.params.chatId);
+    const migratedId = getMigratedGroupId(chatId);
+    return { chatId, migratedId, isMigrated: migratedId !== chatId };
   });
 
   // Serve dashboard static files (only if public dir exists)
