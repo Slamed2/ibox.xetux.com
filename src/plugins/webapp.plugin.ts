@@ -633,13 +633,21 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
             message_type: 'outgoing',
           });
 
-          // Enable department commands in hamburger menu for this user
-          if (telegram_user?.id) {
-            await enableUserCommands(telegram_user.id);
+          // Resolve Telegram chat ID: from WebApp SDK (private) or from Chatwoot contact (group)
+          let telegramChatId: number | undefined = telegram_user?.id;
+          if (!telegramChatId) {
+            // Standalone login (groups): get chat ID from Chatwoot contact's social_telegram_user_id
+            const conversation = await chatwootService.getConversation(conversationIdNum);
+            telegramChatId = conversation?.meta?.sender?.additional_attributes?.social_telegram_user_id as number | undefined;
+          }
+
+          // Enable department commands in the hamburger menu
+          if (telegramChatId) {
+            await enableUserCommands(telegramChatId);
           }
 
           // Send department selection menu via Telegram
-          if (telegram_user?.id) {
+          if (telegramChatId) {
             const country = xetux_id.toUpperCase().startsWith('MX') ? 'mx' : 've';
             const keyboard = new InlineKeyboard()
               .text('💼 Consultoría', `team:${country === 'mx' ? TEAMS.CONSULTORIA_MX : TEAMS.CONSULTORIA_VE}:Consultoría`)
@@ -649,7 +657,7 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
               .text('📋 Administración', `team:${country === 'mx' ? TEAMS.ADMINISTRACION_MX : TEAMS.ADMINISTRACION_VE}:Administración`);
 
             const deptMsg = await bot.api.sendMessage(
-              telegram_user.id,
+              telegramChatId,
               '¿Con qué departamento deseas comunicarte?',
               { reply_markup: keyboard },
             );
