@@ -7,6 +7,7 @@ import { handleMessageUpdated } from '../flows/message-update.flow.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
 import { resetUserCommands } from '../services/telegram.service.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
+import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -78,6 +79,16 @@ function normalizePayload(raw: Record<string, unknown>): ChatwootWebhookPayload 
 
 export const chatwootPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.post('/chatwoot', async (request, reply) => {
+    // Webhook token verification (skip if not configured)
+    if (config.CHATWOOT_WEBHOOK_TOKEN) {
+      const token = request.headers['x-chatwoot-webhook-token'] as string | undefined;
+      if (token !== config.CHATWOOT_WEBHOOK_TOKEN) {
+        logger.warn({ ip: request.ip }, 'Chatwoot webhook rejected: invalid token');
+        reply.code(401);
+        return { error: 'Unauthorized' };
+      }
+    }
+
     const raw = request.body as Record<string, unknown>;
     const event = raw.event as string;
     const payload = normalizePayload(raw);
@@ -85,7 +96,7 @@ export const chatwootPlugin: FastifyPluginAsync = async (fastify) => {
     const inboxId = payload.conversation?.inbox_id ?? (raw.inbox_id as number);
 
     // Only process events from inbox 20 (Telegram) and from contacts
-    if (inboxId && inboxId !== 20) {
+    if (inboxId && inboxId !== config.CHATWOOT_INBOX_ID) {
       logger.debug({ event, inboxId }, 'Ignoring event from non-Telegram inbox');
       return { status: 'ok' };
     }

@@ -575,9 +575,19 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.post<{ Body: RegisterBody }>('/api/webapp/register', async (request, reply) => {
     const { nombre, telefono, email, xetux_id, empresa, contact_id, conversation_id, telegram_user } = request.body;
 
-    if (!contact_id || !conversation_id) {
+    // Input validation
+    const errors: string[] = [];
+    if (!contact_id || !conversation_id) errors.push('contact_id y conversation_id son obligatorios');
+    if (contact_id && !/^\d+$/.test(contact_id)) errors.push('contact_id debe ser numérico');
+    if (conversation_id && !/^\d+$/.test(conversation_id)) errors.push('conversation_id debe ser numérico');
+    if (!nombre || nombre.trim().length === 0) errors.push('nombre es obligatorio');
+    if (nombre && nombre.length > 200) errors.push('nombre no puede exceder 200 caracteres');
+    if (!xetux_id || !/^(VE|MX)\d{5}$/i.test(xetux_id)) errors.push('xetux_id debe tener formato VE##### o MX#####');
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push('email tiene formato inválido');
+
+    if (errors.length > 0) {
       reply.code(400);
-      return { error: 'contact_id y conversation_id son obligatorios' };
+      return { error: errors.join('; ') };
     }
 
     try {

@@ -11,9 +11,8 @@ import {
   resolveTeamFromCommand,
 } from '../services/department-menu.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
+import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
-
-const WEBAPP_BASE_URL = (process.env.WEBHOOK_BASE_URL ?? 'https://xetux2-inbox.zbawxh.easypanel.host') + '/webapp';
 
 // TODO: Configurar keywords y sus team_ids correspondientes
 const KEYWORD_ROUTES: Array<{ keywords: string[]; teamId: number; label: string }> = [];
@@ -70,8 +69,7 @@ export async function handleMessageCreated(payload: ChatwootWebhookPayload) {
     if (command === 'start') return;
 
     // Skip if greeting flow just handled this conversation (prevents duplicate login buttons)
-    const greetedAt = recentlyGreetedConversations.get(conversationId);
-    if (greetedAt && Date.now() - greetedAt < 10_000) {
+    if (recentlyGreetedConversations.has(conversationId)) {
       logger.debug({ conversationId, command }, 'Routing: skipping command — greeting flow just handled this conversation');
       return;
     }
@@ -152,29 +150,21 @@ async function handleTeamSelection(
       // Mark as bot assignment to suppress duplicate notifications in assignment.flow
       markBotAssignment(conversationId);
 
-      // Assign team
-      await chatwootService.assignConversation(conversationId, { team_id: selection.teamId });
-
-      // Manage labels (atomic: remove all old department labels + add new one in single call)
       const teamLabelTag = TEAM_LABELS[selection.teamId];
-      if (teamLabelTag) {
-        await chatwootService.replaceDepartmentLabel(conversationId, teamLabelTag, ALL_DEPARTMENT_LABELS);
-      }
-
-      // Send confirmation to Telegram
       const confirmText = `✅ Conversación #${conversationId} asignada a *${selection.teamLabel}*.\n\nUn agente te atenderá pronto.\n\nSi deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.`;
-      let telegramMessageId: number | undefined;
 
-      if (telegramUserId) {
-        const sentMsg = await bot.api.sendMessage(telegramUserId, confirmText, { parse_mode: 'Markdown' });
-        telegramMessageId = sentMsg.message_id;
-      }
+      // Assign + label + telegram send (parallel — all independent)
+      const [, , sentMsg] = await Promise.all([
+        chatwootService.assignConversation(conversationId, { team_id: selection.teamId }),
+        teamLabelTag ? chatwootService.replaceDepartmentLabel(conversationId, teamLabelTag, ALL_DEPARTMENT_LABELS) : null,
+        telegramUserId ? bot.api.sendMessage(telegramUserId, confirmText, { parse_mode: 'Markdown' }) : null,
+      ]);
 
-      // Sync confirmation to Chatwoot
+      // Sync confirmation to Chatwoot (needs telegramMessageId)
       await chatwootService.sendMessage(conversationId, {
         content: `✅ Conversación #${conversationId} asignada a ${selection.teamLabel}.\n\nUn agente te atenderá pronto.\n\nSi deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.`,
         message_type: 'outgoing',
-        ...(telegramMessageId ? { source_id: String(telegramMessageId) } : {}),
+        ...(sentMsg ? { source_id: String(sentMsg.message_id) } : {}),
       });
 
       return { action: 'team_assigned', ...selection, conversationId };
@@ -226,7 +216,7 @@ async function handleRegistroCommand(
       }
 
       // Not registered: show login button
-      const webappUrl = `${WEBAPP_BASE_URL}?contact_id=${contactId ?? ''}&conversation_id=${conversationId}`;
+      const webappUrl = `${config.WEBAPP_BASE_URL}?contact_id=${contactId ?? ''}&conversation_id=${conversationId}`;
       const isGroup = (telegramUserId ?? 0) < 0;
       const keyboard = isGroup
         ? new InlineKeyboard().url('🔑 Iniciar sesión', webappUrl.replace('/webapp?', '/webapp/login?'))
@@ -271,19 +261,19 @@ async function handleDepartmentCommand(
       // Resolve team from xetux_id country
       const resolved = resolveTeamFromCommand(command, xetuxId);
       if (resolved) {
-        // Assign team
         markBotAssignment(conversationId);
-        await chatwootService.assignConversation(conversationId, { team_id: resolved.teamId });
 
-        // Manage labels (atomic: remove all old department labels + add new one in single call)
         const teamLabelTag = TEAM_LABELS[resolved.teamId];
-        if (teamLabelTag) {
-          await chatwootService.replaceDepartmentLabel(conversationId, teamLabelTag, ALL_DEPARTMENT_LABELS);
-        }
-
-        // Send confirmation
         const confirmText = `✅ Conversación #${conversationId} asignada a *${resolved.label}*.\n\nUn agente te atenderá pronto.\n\nSi deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.`;
-        const sentMsg = await bot.api.sendMessage(telegramUserId, confirmText, { parse_mode: 'Markdown' });
+
+        // Assign + label + telegram send (parallel — all independent)
+        const [, , sentMsg] = await Promise.all([
+          chatwootService.assignConversation(conversationId, { team_id: resolved.teamId }),
+          teamLabelTag ? chatwootService.replaceDepartmentLabel(conversationId, teamLabelTag, ALL_DEPARTMENT_LABELS) : null,
+          bot.api.sendMessage(telegramUserId, confirmText, { parse_mode: 'Markdown' }),
+        ]);
+
+        // Sync to Chatwoot (needs telegramMessageId)
         await chatwootService.sendMessage(conversationId, {
           content: `✅ Conversación #${conversationId} asignada a ${resolved.label}.\n\nUn agente te atenderá pronto.\n\nSi deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.`,
           message_type: 'outgoing',
@@ -294,7 +284,7 @@ async function handleDepartmentCommand(
       }
 
       // No xetux_id: show login button
-      const webappUrl = `${WEBAPP_BASE_URL}?contact_id=${contactId ?? ''}&conversation_id=${conversationId}`;
+      const webappUrl = `${config.WEBAPP_BASE_URL}?contact_id=${contactId ?? ''}&conversation_id=${conversationId}`;
       const isGroup = (telegramUserId ?? 0) < 0;
       const keyboard = isGroup
         ? new InlineKeyboard().url('🔑 Iniciar sesión', webappUrl.replace('/webapp?', '/webapp/login?'))

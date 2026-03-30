@@ -4,6 +4,7 @@ import axios from 'axios';
 import { bot, setupTelegramWebhook, registerGroupMigration, getMigratedGroupId } from '../services/telegram.service.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
+import { TtlMap } from '../utils/ttl-map.js';
 
 /**
  * Track original sender IDs from group messages.
@@ -11,16 +12,10 @@ import { logger } from '../utils/logger.js';
  * so the greeting flow can suppress duplicate private-chat greetings.
  * Entries expire after 30 seconds.
  */
-const recentGroupSenders = new Map<number, number>();
+const recentGroupSenders = new TtlMap<number, true>(30_000);
 
 export function wasRecentGroupSender(userId: number): boolean {
-  const ts = recentGroupSenders.get(userId);
-  if (!ts) return false;
-  if (Date.now() - ts > 30_000) {
-    recentGroupSenders.delete(userId);
-    return false;
-  }
-  return true;
+  return recentGroupSenders.has(userId);
 }
 
 
@@ -144,7 +139,7 @@ function transformGroupMessage(body: unknown): unknown {
   // can suppress the duplicate private-chat greeting that Chatwoot may trigger.
   const originalFromId = msg.from?.id;
   if (originalFromId && originalFromId > 0) {
-    recentGroupSenders.set(originalFromId, Date.now());
+    recentGroupSenders.set(originalFromId, true);
   }
 
   const transformed = JSON.parse(JSON.stringify(body));

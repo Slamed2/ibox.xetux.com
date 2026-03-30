@@ -4,17 +4,17 @@ import { bot, enableUserCommands, resetUserCommands, consumePendingDeepLinkXetux
 import { MENU_TEXT, TEAMS } from '../services/department-menu.js';
 import { wasRecentGroupSender } from '../plugins/telegram.plugin.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
+import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { InlineKeyboard } from 'grammy';
-
-const WEBAPP_BASE_URL = (process.env.WEBHOOK_BASE_URL ?? 'https://xetux2-inbox.zbawxh.easypanel.host') + '/webapp';
+import { TtlMap } from '../utils/ttl-map.js';
 
 /**
  * Track recently greeted conversations so the routing flow skips duplicate
  * command handling (e.g. /registro arriving as the first message).
  * Entries auto-expire after 10 seconds.
  */
-export const recentlyGreetedConversations = new Map<number, number>();
+export const recentlyGreetedConversations = new TtlMap<number, true>(10_000);
 
 /** WebApp buttons don't work in groups — use URL button that opens standalone page. */
 function loginButton(label: string, url: string, chatId: number): InlineKeyboard {
@@ -78,19 +78,19 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
         logger.info({ contactId: contact.id, xetuxId: deepLinkXetuxId }, 'Contact updated via deep link in greeting flow');
       }
 
-      let webappUrl = `${WEBAPP_BASE_URL}?contact_id=${contact?.id ?? ''}&conversation_id=${conversation.id}`;
+      let webappUrl = `${config.WEBAPP_BASE_URL}?contact_id=${contact?.id ?? ''}&conversation_id=${conversation.id}`;
       // Pass deep link xetux_id to webapp so field is pre-filled
       if (deepLinkXetuxId && !xetuxId) {
         webappUrl += `&xetux_id=${encodeURIComponent(deepLinkXetuxId)}`;
       }
 
-      // Add country label and set commands based on user state
+      // Add country label and set commands based on user state (parallel — independent calls)
       if (effectiveXetuxId) {
         const countryLabel = effectiveXetuxId.toUpperCase().startsWith('MX') ? 'mexico' : 'venezuela';
-        await chatwootService.addLabels(conversation.id, [countryLabel]);
-        if (telegramUserId) {
-          await enableUserCommands(telegramUserId);
-        }
+        await Promise.all([
+          chatwootService.addLabels(conversation.id, [countryLabel]),
+          telegramUserId ? enableUserCommands(telegramUserId) : null,
+        ]);
       } else if (telegramUserId) {
         // No xetux_id: reset to guest menu (handles deleted contacts)
         await resetUserCommands(telegramUserId);
@@ -160,7 +160,7 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
       }
 
       // Mark as recently greeted so routing flow skips duplicate command handling
-      recentlyGreetedConversations.set(conversation.id, Date.now());
+      recentlyGreetedConversations.set(conversation.id, true);
 
       return {
         greeting: !effectiveXetuxId ? 'welcome_no_xetux_id' : deepLinkXetuxId ? 'welcome_deep_link' : 'welcome_with_xetux_id',

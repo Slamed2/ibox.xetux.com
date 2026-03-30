@@ -44,17 +44,17 @@ export async function handleConversationResolved(payload: ChatwootWebhookPayload
       const messages = await chatwootService.getMessages(conversation.id);
       const summary = await summarizeConversation(messages);
 
-      // Save summary as internal note
-      await chatwootService.sendMessage(conversation.id, {
-        content: `📋 **Informe IA**\n\n${summary}`,
-        private: true,
-        message_type: 'outgoing',
-      });
-
-      // Save summary in conversation custom_attributes
-      await chatwootService.updateConversationCustomAttributes(conversation.id, {
-        resumen_de_ia: summary,
-      });
+      // Save summary: internal note + custom attrs (parallel — independent of each other)
+      await Promise.all([
+        chatwootService.sendMessage(conversation.id, {
+          content: `📋 **Informe IA**\n\n${summary}`,
+          private: true,
+          message_type: 'outgoing',
+        }),
+        chatwootService.updateConversationCustomAttributes(conversation.id, {
+          resumen_de_ia: summary,
+        }),
+      ]);
 
       logger.info({ conversationId: conversation.id }, 'Conversation closed with farewell and AI summary');
       return { farewell: 'sent', telegramMessageId, aiSummary: true };

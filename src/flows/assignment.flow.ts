@@ -51,22 +51,19 @@ async function handleTeamChange(conversation: any, telegramUserId: number | unde
     async () => {
       const teamName = TEAM_NAMES[currentTeamId] ?? `Equipo #${currentTeamId}`;
       const message = `🔄 Conversación #${conversation.id} transferida a *${teamName}*.\n\nUn agente te atenderá pronto.`;
-
-      let telegramMessageId: number | undefined;
-      if (telegramUserId) {
-        const sentMsg = await bot.api.sendMessage(telegramUserId, message, { parse_mode: 'Markdown' });
-        telegramMessageId = sentMsg.message_id;
-      }
-
       const teamLabelTag = TEAM_LABELS[currentTeamId];
-      if (teamLabelTag) {
-        await chatwootService.replaceDepartmentLabel(conversation.id, teamLabelTag, ALL_DEPARTMENT_LABELS);
-      }
 
+      // Telegram send + label replace (parallel — independent of each other)
+      const [sentMsg] = await Promise.all([
+        telegramUserId ? bot.api.sendMessage(telegramUserId, message, { parse_mode: 'Markdown' }) : null,
+        teamLabelTag ? chatwootService.replaceDepartmentLabel(conversation.id, teamLabelTag, ALL_DEPARTMENT_LABELS) : null,
+      ]);
+
+      // Sync to Chatwoot (needs telegramMessageId)
       await chatwootService.sendMessage(conversation.id, {
         content: `🔄 Conversación #${conversation.id} transferida a ${teamName}. Un agente te atenderá pronto.`,
         message_type: 'outgoing',
-        ...(telegramMessageId ? { source_id: String(telegramMessageId) } : {}),
+        ...(sentMsg ? { source_id: String(sentMsg.message_id) } : {}),
       });
 
       return { action: 'team_notified', currentTeamId, teamName };

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
 import { logger } from './utils/logger.js';
-import { db } from './db/connection.js';
+import { db, pool } from './db/connection.js';
 import { healthPlugin } from './plugins/health.plugin.js';
 import { chatwootPlugin } from './plugins/chatwoot.plugin.js';
 import { telegramPlugin } from './plugins/telegram.plugin.js';
@@ -33,15 +33,6 @@ await app.register(telegramPlugin, { prefix: '/webhook' });
 await app.register(webappPlugin);
 await app.register(dashboardPlugin);
 
-// Graceful shutdown
-const shutdown = async (signal: string) => {
-  logger.info(`Received ${signal}, shutting down...`);
-  await app.close();
-  process.exit(0);
-};
-process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-
 // Log cleanup scheduler
 const runCleanup = async () => {
   try {
@@ -52,7 +43,18 @@ const runCleanup = async () => {
   }
 };
 runCleanup(); // Run on startup
-setInterval(runCleanup, config.LOG_CLEANUP_INTERVAL_HOURS * 60 * 60 * 1000);
+const cleanupInterval = setInterval(runCleanup, config.LOG_CLEANUP_INTERVAL_HOURS * 60 * 60 * 1000);
+
+// Graceful shutdown
+const shutdown = async (signal: string) => {
+  logger.info(`Received ${signal}, shutting down...`);
+  clearInterval(cleanupInterval);
+  await app.close();
+  await pool.end();
+  process.exit(0);
+};
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 // Start
 try {

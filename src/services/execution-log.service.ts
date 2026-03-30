@@ -132,20 +132,25 @@ export async function getLogById(id: string) {
 }
 
 export async function getLogStats(): Promise<LogStats> {
-  const [totals] = await db.select({
-    totalLogs: count(),
-    avgDurationMs: avg(executionLogs.durationMs),
-  }).from(executionLogs);
+  // Run all 3 queries in parallel instead of sequentially (3 full scans → 3 concurrent scans)
+  const [totalsResult, byStatusRows, byEventRows] = await Promise.all([
+    db.select({
+      totalLogs: count(),
+      avgDurationMs: avg(executionLogs.durationMs),
+    }).from(executionLogs),
 
-  const byStatusRows = await db.select({
-    status: executionLogs.status,
-    count: count(),
-  }).from(executionLogs).groupBy(executionLogs.status);
+    db.select({
+      status: executionLogs.status,
+      count: count(),
+    }).from(executionLogs).groupBy(executionLogs.status),
 
-  const byEventRows = await db.select({
-    eventType: executionLogs.eventType,
-    count: count(),
-  }).from(executionLogs).groupBy(executionLogs.eventType);
+    db.select({
+      eventType: executionLogs.eventType,
+      count: count(),
+    }).from(executionLogs).groupBy(executionLogs.eventType),
+  ]);
+
+  const totals = totalsResult[0];
 
   const byStatus: Record<string, number> = {};
   for (const row of byStatusRows) {

@@ -7,6 +7,7 @@ import { db } from '../db/connection.js';
 import { botConfig } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { BOT_COMMANDS, GUEST_COMMANDS } from './department-menu.js';
+import { TtlMap } from '../utils/ttl-map.js';
 
 export const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 
@@ -81,38 +82,29 @@ export function getMigratedGroupId(chatId: number): number {
 
 // ─── Bot assignment tracking ─────────────────────────────────────────────────
 
-const recentBotAssignments = new Map<number, number>();
+const recentBotAssignments = new TtlMap<number, true>(10_000);
 
 export function markBotAssignment(conversationId: number): void {
-  recentBotAssignments.set(conversationId, Date.now());
+  recentBotAssignments.set(conversationId, true);
 }
 
 export function wasBotAssignment(conversationId: number): boolean {
-  const ts = recentBotAssignments.get(conversationId);
-  if (!ts) return false;
-  if (Date.now() - ts > 10_000) {
-    recentBotAssignments.delete(conversationId);
-    return false;
-  }
-  // Don't consume — multiple webhooks may fire for a single assignment
-  // (team change + assignee change + labels). The 10s TTL handles cleanup.
-  return true;
+  return recentBotAssignments.has(conversationId);
 }
 
 // ─── Deep link pending storage ───────────────────────────────────────────────
 
-const pendingDeepLinkXetuxIds = new Map<number, { xetuxId: string; timestamp: number }>();
+const pendingDeepLinkXetuxIds = new TtlMap<number, string>(30_000);
 
 export function setPendingDeepLinkXetuxId(telegramUserId: number, xetuxId: string): void {
-  pendingDeepLinkXetuxIds.set(telegramUserId, { xetuxId, timestamp: Date.now() });
+  pendingDeepLinkXetuxIds.set(telegramUserId, xetuxId);
 }
 
 export function consumePendingDeepLinkXetuxId(telegramUserId: number): string | null {
-  const entry = pendingDeepLinkXetuxIds.get(telegramUserId);
-  if (!entry) return null;
+  const value = pendingDeepLinkXetuxIds.get(telegramUserId);
+  if (!value) return null;
   pendingDeepLinkXetuxIds.delete(telegramUserId);
-  if (Date.now() - entry.timestamp > 30_000) return null;
-  return entry.xetuxId;
+  return value;
 }
 
 // ─── Thin grammY handlers ────────────────────────────────────────────────────
