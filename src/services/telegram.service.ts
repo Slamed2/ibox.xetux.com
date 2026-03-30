@@ -444,6 +444,9 @@ bot.on('callback_query:data', async (ctx) => {
     const teamId = parseInt(parts[1], 10);
     const teamLabel = parts[2] ?? '';
 
+    // ACK immediately so Telegram doesn't retry the callback
+    await ctx.answerCallbackQuery();
+
     await withExecutionLog(
       {
         eventType: 'telegram:dept_callback',
@@ -454,7 +457,6 @@ bot.on('callback_query:data', async (ctx) => {
         metadata: { teamId, teamLabel, username: ctx.from?.username ?? null, chatType: ctx.chat?.type },
       },
       async () => {
-        await ctx.answerCallbackQuery();
 
         // Button press is forwarded to Chatwoot as synthetic message (via telegram.plugin.ts)
         // so we don't need to manually log it here.
