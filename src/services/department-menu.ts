@@ -33,6 +33,9 @@ export const TEAM_LABELS: Record<number, string> = {
   [LEGACY_TEAMS.ADMINISTRACION]: 'administracion',
 };
 
+// All department label values — used to remove old department labels before adding a new one
+export const ALL_DEPARTMENT_LABELS = Object.values(TEAM_LABELS);
+
 // Team names for display
 export const TEAM_NAMES: Record<number, string> = {
   [TEAMS.SOPORTE_MX]: 'Soporte México',

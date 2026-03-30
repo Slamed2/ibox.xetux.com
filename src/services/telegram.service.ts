@@ -14,6 +14,7 @@ import {
   BOT_COMMANDS,
   GUEST_COMMANDS,
   TEAM_LABELS,
+  ALL_DEPARTMENT_LABELS,
 } from './department-menu.js';
 
 export const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
@@ -449,6 +450,9 @@ bot.on('callback_query:data', async (ctx) => {
           await chatwootService.assignConversation(conversationId, { team_id: teamId });
           const teamLabelTag = TEAM_LABELS[teamId];
           if (teamLabelTag) {
+            // Remove previous department labels before adding the new one
+            const oldLabels = ALL_DEPARTMENT_LABELS.filter(l => l !== teamLabelTag);
+            await chatwootService.removeLabels(conversationId, oldLabels);
             await chatwootService.addLabels(conversationId, [teamLabelTag]);
           }
         }
@@ -552,6 +556,9 @@ async function assignTeamAndConfirm(ctx: any, lookupId: number, teamId: number, 
     await chatwootService.assignConversation(conversationId, { team_id: teamId });
     const teamLabelTag = TEAM_LABELS[teamId];
     if (teamLabelTag) {
+      // Remove previous department labels before adding the new one
+      const oldLabels = ALL_DEPARTMENT_LABELS.filter(l => l !== teamLabelTag);
+      await chatwootService.removeLabels(conversationId, oldLabels);
       await chatwootService.addLabels(conversationId, [teamLabelTag]);
     }
   }
