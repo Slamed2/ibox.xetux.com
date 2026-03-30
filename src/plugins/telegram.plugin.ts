@@ -110,15 +110,19 @@ function transformGroupMessage(body: unknown): unknown {
  */
 function forwardToChatwoot(body: unknown, chatwootUrl: string) {
   const update = body as any;
+  // Skip callback_query — Chatwoot can't process them
   if (update?.callback_query) {
     logger.debug('Skipping callback_query forward to Chatwoot');
     return;
   }
-  // Skip bot commands — grammY handles them and syncs to Chatwoot directly
+  // Skip bot commands in groups — grammY handles them and syncs to Chatwoot.
+  // In private chats, commands must reach Chatwoot to create conversations (/start).
   const msg = update?.message ?? update?.edited_message;
+  const chatType = msg?.chat?.type;
   const text = msg?.text ?? '';
-  if (text.startsWith('/')) {
-    logger.debug({ text: text.substring(0, 30) }, 'Skipping bot command forward to Chatwoot');
+  const isGroup = chatType === 'group' || chatType === 'supergroup';
+  if (isGroup && text.startsWith('/')) {
+    logger.debug({ text: text.substring(0, 30) }, 'Skipping group command forward to Chatwoot');
     return;
   }
   const transformed = transformGroupMessage(body);
