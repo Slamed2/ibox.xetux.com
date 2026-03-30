@@ -654,9 +654,11 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
             // Standalone login (groups): get chat ID from Chatwoot contact's social_telegram_user_id
             const conversation = await chatwootService.getConversation(conversationIdNum);
             telegramChatId = conversation?.meta?.sender?.additional_attributes?.social_telegram_user_id as number | undefined;
+            logger.debug({ telegramChatId, conversationId: conversationIdNum }, 'Resolved telegramChatId from Chatwoot contact');
           }
 
           // Enable department commands in the hamburger menu
+          // For groups (negative ID), set commands for the group chat
           if (telegramChatId) {
             await enableUserCommands(telegramChatId);
           }

@@ -185,7 +185,12 @@ bot.command('registro', async (ctx) => {
     },
     async () => {
       // Find conversation and contact in Chatwoot
-      const conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
+      // For groups: the forward to Chatwoot is fire-and-forget, conversation may not exist yet
+      let conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
+      if (!conversationId && isGroupChat(ctx)) {
+        await new Promise(r => setTimeout(r, 2500));
+        conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
+      }
       const conversation = conversationId ? await chatwootService.getConversation(conversationId) : null;
       const contactId = conversation?.meta?.sender?.id ?? '';
 
@@ -262,7 +267,12 @@ async function handleDepartmentCommand(ctx: any, command: string, displayName: s
       }
 
       // Try to auto-resolve country from xetux_id
-      const conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
+      // For groups: retry after delay if conversation not found yet (async forward)
+      let conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
+      if (!conversationId && isGroupChat(ctx)) {
+        await new Promise(r => setTimeout(r, 2500));
+        conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
+      }
       const conversation = conversationId ? await chatwootService.getConversation(conversationId) : null;
       const xetuxId = conversation?.meta?.sender?.custom_attributes?.xetux_id as string | undefined;
 
