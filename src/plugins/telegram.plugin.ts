@@ -105,9 +105,15 @@ function transformGroupMessage(body: unknown): unknown {
 }
 
 /**
- * Forward Telegram webhook payload to Chatwoot (fire-and-forget)
+ * Forward Telegram webhook payload to Chatwoot (fire-and-forget).
+ * Skip callback_query — Chatwoot can't process them and they cause duplicate conversations.
  */
 function forwardToChatwoot(body: unknown, chatwootUrl: string) {
+  const update = body as any;
+  if (update?.callback_query) {
+    logger.debug('Skipping callback_query forward to Chatwoot');
+    return;
+  }
   const transformed = transformGroupMessage(body);
   axios.post(chatwootUrl, transformed, {
     headers: { 'Content-Type': 'application/json' },
