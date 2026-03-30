@@ -5,15 +5,18 @@ import {
   createColumnHelper,
 } from '@tanstack/react-table';
 import { format } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
 import type { ExecutionLog } from '../types/index.js';
 import { StatusBadge } from './StatusBadge.js';
+
+const TZ = 'America/Caracas'; // UTC-4
 
 const columnHelper = createColumnHelper<ExecutionLog>();
 
 const columns = [
   columnHelper.accessor('createdAt', {
     header: 'Time',
-    cell: (info) => format(new Date(info.getValue()), 'dd/MM HH:mm:ss'),
+    cell: (info) => format(toZonedTime(new Date(info.getValue()), TZ), 'dd/MM HH:mm:ss'),
   }),
   columnHelper.accessor('eventType', {
     header: 'Event',
@@ -61,9 +64,10 @@ interface LogTableProps {
   totalPages: number;
   total: number;
   onPageChange: (page: number) => void;
+  markTimestamp?: string | null;
 }
 
-export function LogTable({ data, onRowClick, page, totalPages, total, onPageChange }: LogTableProps) {
+export function LogTable({ data, onRowClick, page, totalPages, total, onPageChange, markTimestamp }: LogTableProps) {
   const table = useReactTable({
     data,
     columns,
@@ -93,19 +97,55 @@ export function LogTable({ data, onRowClick, page, totalPages, total, onPageChan
                 </td>
               </tr>
             ) : (
-              table.getRowModel().rows.map((row) => (
-                <tr
-                  key={row.id}
-                  onClick={() => onRowClick(row.original)}
-                  className="border-b hover:bg-blue-50 cursor-pointer transition-colors"
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-3 py-2">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
-                </tr>
-              ))
+              table.getRowModel().rows.map((row, idx) => {
+                // Show separator line between rows that straddle the mark timestamp
+                // Logs are sorted newest-first, so mark goes AFTER the last row newer than markTimestamp
+                let showMark = false;
+                if (markTimestamp) {
+                  const thisTime = new Date(row.original.createdAt).getTime();
+                  const markTime = new Date(markTimestamp).getTime();
+                  if (thisTime < markTime) {
+                    // This row is older than the mark — check if previous row was newer
+                    const prevRow = table.getRowModel().rows[idx - 1];
+                    if (!prevRow || new Date(prevRow.original.createdAt).getTime() >= markTime) {
+                      showMark = true;
+                    }
+                  }
+                }
+
+                return (
+                  <>
+                    {showMark && (
+                      <tr key={`mark-${row.id}`}>
+                        <td colSpan={columns.length} className="px-0 py-0">
+                          <div className="flex items-center gap-2 py-1">
+                            <div className="flex-1 border-t-2 border-dashed border-yellow-400" />
+                            <span className="text-[10px] font-semibold text-yellow-600 uppercase tracking-wider whitespace-nowrap">
+                              ✂ Marca — {format(toZonedTime(new Date(markTimestamp!), TZ), 'dd/MM HH:mm:ss')}
+                            </span>
+                            <div className="flex-1 border-t-2 border-dashed border-yellow-400" />
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    <tr
+                      key={row.id}
+                      onClick={() => onRowClick(row.original)}
+                      className={`border-b hover:bg-blue-50 cursor-pointer transition-colors${
+                        markTimestamp && new Date(row.original.createdAt).getTime() >= new Date(markTimestamp).getTime()
+                          ? ' bg-yellow-50/40'
+                          : ''
+                      }`}
+                    >
+                      {row.getVisibleCells().map((cell) => (
+                        <td key={cell.id} className="px-3 py-2">
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      ))}
+                    </tr>
+                  </>
+                );
+              })
             )}
           </tbody>
         </table>

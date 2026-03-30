@@ -48,7 +48,7 @@ export function LogDetail({ log, onClose }: LogDetailProps) {
             </div>
             <div>
               <span className="text-gray-500 block">Created At</span>
-              <span className="font-mono">{new Date(log.createdAt).toLocaleString()}</span>
+              <span className="font-mono">{new Date(log.createdAt).toLocaleString('es-VE', { timeZone: 'America/Caracas' })}</span>
             </div>
             <div>
               <span className="text-gray-500 block">ID</span>

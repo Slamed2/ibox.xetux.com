@@ -8,6 +8,7 @@ import type { ExecutionLog, LogFilters } from './types/index.js';
 export default function App() {
   const [filters, setFilters] = useState<LogFilters>({ page: 1, limit: 50 });
   const [selectedLog, setSelectedLog] = useState<ExecutionLog | null>(null);
+  const [markTimestamp, setMarkTimestamp] = useState<string | null>(null);
 
   const { data: logsData, isLoading, error } = useExecutionLogs(filters);
   const { data: stats } = useLogStats();
@@ -48,7 +49,27 @@ export default function App() {
       <main className="max-w-7xl mx-auto px-6 py-6">
         {/* Filters */}
         <div className="bg-white rounded-lg shadow-sm border p-4 mb-4">
-          <Filters filters={filters} onChange={setFilters} />
+          <div className="flex items-center justify-between">
+            <Filters filters={filters} onChange={setFilters} />
+            <div className="flex items-center gap-2 ml-4 shrink-0">
+              <button
+                onClick={() => setMarkTimestamp(new Date().toISOString())}
+                className="px-3 py-1.5 bg-yellow-500 text-white text-sm font-medium rounded hover:bg-yellow-600 transition-colors"
+                title="Marcar este momento — los logs nuevos aparecerán después de la línea"
+              >
+                ✂ Marcar
+              </button>
+              {markTimestamp && (
+                <button
+                  onClick={() => setMarkTimestamp(null)}
+                  className="px-2 py-1.5 text-gray-400 hover:text-gray-600 text-sm"
+                  title="Quitar marca"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Table */}
@@ -69,6 +90,7 @@ export default function App() {
               totalPages={logsData.totalPages}
               total={logsData.total}
               onPageChange={(page) => setFilters((f) => ({ ...f, page }))}
+              markTimestamp={markTimestamp}
             />
           ) : null}
         </div>
