@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import rateLimit from '@fastify/rate-limit';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,6 +26,13 @@ try {
 }
 
 const app = Fastify({ logger: false });
+
+// Rate limiting — protects against webhook floods
+await app.register(rateLimit, {
+  max: 300,
+  timeWindow: '1 minute',
+  allowList: (req) => req.url?.startsWith('/health') ?? false,
+});
 
 // Plugins
 await app.register(healthPlugin);

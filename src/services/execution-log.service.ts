@@ -1,11 +1,16 @@
+import { randomUUID } from 'node:crypto';
 import { db } from '../db/connection.js';
 import { executionLogs } from '../db/schema.js';
 import { eq, desc, and, gte, lte, lt, sql, count, avg, or, ilike, ne } from 'drizzle-orm';
 import type { CreateExecutionLog, ExecutionLogResult, LogFilters, LogStats } from '../types/execution-log.types.js';
 import { logger } from '../utils/logger.js';
 
-export async function startExecution(data: CreateExecutionLog): Promise<string> {
-  const [log] = await db.insert(executionLogs).values({
+// ─── Async (fire-and-forget) logging — non-blocking ────────────────────────
+
+function startExecutionAsync(data: CreateExecutionLog): string {
+  const logId = randomUUID();
+  db.insert(executionLogs).values({
+    id: logId,
     eventType: data.eventType,
     source: data.source,
     direction: data.direction,
@@ -14,13 +19,12 @@ export async function startExecution(data: CreateExecutionLog): Promise<string> 
     conversationId: data.conversationId,
     contactId: data.contactId,
     metadata: data.metadata ?? {},
-  }).returning({ id: executionLogs.id });
-
-  return log.id;
+  }).catch(err => logger.error({ err, logId }, 'Failed to insert execution log'));
+  return logId;
 }
 
-export async function completeExecution(logId: string, result: ExecutionLogResult): Promise<void> {
-  await db.update(executionLogs)
+function completeExecutionAsync(logId: string, result: ExecutionLogResult): void {
+  db.update(executionLogs)
     .set({
       status: result.status,
       outputData: result.outputData ?? null,
@@ -28,7 +32,8 @@ export async function completeExecution(logId: string, result: ExecutionLogResul
       durationMs: result.durationMs,
       updatedAt: new Date(),
     })
-    .where(eq(executionLogs.id, logId));
+    .where(eq(executionLogs.id, logId))
+    .catch(err => logger.error({ err, logId }, 'Failed to update execution log'));
 }
 
 export async function withExecutionLog<T>(
@@ -36,11 +41,11 @@ export async function withExecutionLog<T>(
   fn: () => Promise<T>,
 ): Promise<T> {
   const startTime = Date.now();
-  const logId = await startExecution(data);
+  const logId = startExecutionAsync(data);
 
   try {
     const result = await fn();
-    await completeExecution(logId, {
+    completeExecutionAsync(logId, {
       id: logId,
       status: 'success',
       outputData: result,
@@ -50,7 +55,7 @@ export async function withExecutionLog<T>(
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error({ logId, error: errorMessage }, 'Execution failed');
-    await completeExecution(logId, {
+    completeExecutionAsync(logId, {
       id: logId,
       status: 'error',
       errorMessage,

@@ -31,6 +31,37 @@ bot.api.config.use((prev, method, payload, signal) => {
   return prev(method, payload, signal);
 });
 
+// Retry transformer — wraps all outgoing Telegram API calls with exponential backoff
+bot.api.config.use(async (prev, method, payload, signal) => {
+  const maxRetries = 3;
+  const baseDelay = 500;
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await prev(method, payload, signal);
+    } catch (error: any) {
+      lastError = error;
+      const status = error?.error_code ?? error?.status;
+      const isRetryable = status === 429
+        || (status >= 500 && status < 600)
+        || error?.code === 'ECONNRESET'
+        || error?.code === 'ETIMEDOUT';
+
+      if (!isRetryable || attempt === maxRetries) throw error;
+
+      const retryAfter = error?.parameters?.retry_after;
+      const delayMs = retryAfter
+        ? retryAfter * 1000
+        : baseDelay * Math.pow(3, attempt); // 500ms, 1500ms, 4500ms
+
+      logger.warn({ method, attempt: attempt + 1, delayMs, status }, 'Telegram API retry');
+      await new Promise(r => setTimeout(r, delayMs));
+    }
+  }
+  throw lastError;
+});
+
 // ─── Group migration infrastructure ─────────────────────────────────────────
 
 const groupMigrations = new Map<number, number>();

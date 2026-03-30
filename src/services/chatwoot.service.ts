@@ -1,6 +1,12 @@
 import axios, { type AxiosInstance, type AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import { Agent as HttpAgent } from 'node:http';
+import { Agent as HttpsAgent } from 'node:https';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
+
+// Reusable keep-alive agents — avoids TCP+TLS handshake per request
+export const keepAliveHttpAgent = new HttpAgent({ keepAlive: true, maxSockets: 15 });
+export const keepAliveHttpsAgent = new HttpsAgent({ keepAlive: true, maxSockets: 15 });
 import type {
   ChatwootSendMessagePayload,
   ChatwootAssignPayload,
@@ -40,6 +46,8 @@ class ChatwootService {
     this.client = axios.create({
       baseURL: `${config.CHATWOOT_BASE_URL}/api/v1/accounts/${this.accountId}`,
       timeout: config.CHATWOOT_API_TIMEOUT_MS,
+      httpAgent: keepAliveHttpAgent,
+      httpsAgent: keepAliveHttpsAgent,
       headers: {
         'Content-Type': 'application/json',
         'api_access_token': config.CHATWOOT_API_TOKEN,

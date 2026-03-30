@@ -2,6 +2,7 @@ import { FastifyPluginAsync } from 'fastify';
 import { webhookCallback } from 'grammy';
 import axios from 'axios';
 import { bot, setupTelegramWebhook, registerGroupMigration, getMigratedGroupId } from '../services/telegram.service.js';
+import { keepAliveHttpAgent, keepAliveHttpsAgent } from '../services/chatwoot.service.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { TtlMap } from '../utils/ttl-map.js';
@@ -198,6 +199,8 @@ async function forwardToChatwoot(body: unknown, chatwootUrl: string): Promise<vo
   await axios.post(chatwootUrl, payload, {
     headers: { 'Content-Type': 'application/json' },
     timeout: 10000,
+    httpAgent: keepAliveHttpAgent,
+    httpsAgent: keepAliveHttpsAgent,
   });
   logger.debug('Forwarded Telegram update to Chatwoot');
 }
