@@ -40,10 +40,47 @@ export const telegramPlugin: FastifyPluginAsync = async (fastify) => {
 };
 
 /**
+ * Transform group/supergroup messages to look like private messages for Chatwoot.
+ * The original body is NOT mutated — grammY needs it intact.
+ */
+function transformGroupMessage(body: unknown): unknown {
+  const update = body as any;
+  const msg = update?.message ?? update?.edited_message;
+  if (!msg?.chat) return body;
+
+  const chatType = msg.chat.type;
+  if (chatType !== 'group' && chatType !== 'supergroup') return body;
+
+  const transformed = JSON.parse(JSON.stringify(body));
+  const tMsg = transformed.message ?? transformed.edited_message;
+
+  const senderName = tMsg.from?.first_name ?? tMsg.from?.username ?? 'Unknown';
+  const groupTitle = tMsg.chat.title ?? 'Sin nombre';
+
+  // Make it look like a private chat tied to the sender
+  tMsg.chat.type = 'private';
+  tMsg.chat.id = tMsg.from.id;
+  tMsg.chat.first_name = `Grupo ${groupTitle}`;
+  tMsg.chat.username = tMsg.from.username;
+  delete tMsg.chat.title;
+
+  // Prefix message with sender name
+  if (tMsg.text) {
+    tMsg.text = `${senderName}: ${tMsg.text}`;
+  }
+  if (tMsg.caption) {
+    tMsg.caption = `${senderName}: ${tMsg.caption}`;
+  }
+
+  return transformed;
+}
+
+/**
  * Forward Telegram webhook payload to Chatwoot (fire-and-forget)
  */
 function forwardToChatwoot(body: unknown, chatwootUrl: string) {
-  axios.post(chatwootUrl, body, {
+  const transformed = transformGroupMessage(body);
+  axios.post(chatwootUrl, transformed, {
     headers: { 'Content-Type': 'application/json' },
     timeout: 5000,
   }).then(() => {
