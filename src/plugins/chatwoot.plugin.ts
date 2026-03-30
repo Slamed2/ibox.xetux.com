@@ -12,7 +12,7 @@ import { logger } from '../utils/logger.js';
 import { TaskQueue } from '../utils/task-queue.js';
 
 // Limit concurrent webhook processing to prevent resource exhaustion
-const webhookQueue = new TaskQueue(15);
+const webhookQueue = new TaskQueue(config.WEBHOOK_QUEUE_CONCURRENCY);
 
 /**
  * Normalize Chatwoot webhook payload.

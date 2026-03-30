@@ -5,9 +5,9 @@ import * as schema from './schema.js';
 
 const pool = new pg.Pool({
   connectionString: config.DATABASE_URL,
-  max: 40,
-  connectionTimeoutMillis: 5000,
-  idleTimeoutMillis: 30000,
+  max: config.DATABASE_POOL_MAX,
+  connectionTimeoutMillis: config.DATABASE_CONNECTION_TIMEOUT_MS,
+  idleTimeoutMillis: config.DATABASE_IDLE_TIMEOUT_MS,
   allowExitOnIdle: true,
 });
 

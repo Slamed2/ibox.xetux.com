@@ -4,7 +4,7 @@ import { logger } from '../utils/logger.js';
 
 const openai = new OpenAI({ apiKey: config.OPENAI_API_KEY });
 
-const SYSTEM_PROMPT = `Eres un asistente que analiza conversaciones de soporte técnico de la empresa Xetux.
+const SYSTEM_PROMPT = `Eres un asistente que analiza conversaciones de soporte técnico de la empresa ${config.COMPANY_NAME}.
 Tu tarea es generar un informe breve y profesional de la conversación.
 
 El informe debe incluir:
@@ -33,13 +33,13 @@ export async function summarizeConversation(messages: Array<{ content: string; m
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: config.OPENAI_MODEL,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: `Analiza la siguiente conversación:\n\n${conversationText}` },
       ],
-      max_tokens: 500,
-      temperature: 0.3,
+      max_tokens: config.OPENAI_MAX_TOKENS,
+      temperature: config.OPENAI_TEMPERATURE,
     });
 
     return response.choices[0]?.message?.content ?? 'No se pudo generar el resumen.';

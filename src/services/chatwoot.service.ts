@@ -5,8 +5,8 @@ import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 
 // Reusable keep-alive agents — avoids TCP+TLS handshake per request
-export const keepAliveHttpAgent = new HttpAgent({ keepAlive: true, maxSockets: 15 });
-export const keepAliveHttpsAgent = new HttpsAgent({ keepAlive: true, maxSockets: 15 });
+export const keepAliveHttpAgent = new HttpAgent({ keepAlive: true, maxSockets: config.HTTP_AGENT_MAX_SOCKETS });
+export const keepAliveHttpsAgent = new HttpsAgent({ keepAlive: true, maxSockets: config.HTTP_AGENT_MAX_SOCKETS });
 import type {
   ChatwootSendMessagePayload,
   ChatwootAssignPayload,

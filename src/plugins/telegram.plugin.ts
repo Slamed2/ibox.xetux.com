@@ -69,7 +69,7 @@ export const telegramPlugin: FastifyPluginAsync = async (fastify) => {
   // Set webhook URL on startup (only in production or if explicitly enabled)
   fastify.addHook('onReady', async () => {
     if (config.NODE_ENV === 'production') {
-      const baseUrl = process.env.WEBHOOK_BASE_URL ?? `https://ibox.xetux.com`;
+      const baseUrl = config.WEBHOOK_BASE_URL || `https://ibox.xetux.com`;
       const fullUrl = `${baseUrl}/webhook${webhookPath}`;
       try {
         await setupTelegramWebhook(fullUrl);
@@ -198,7 +198,7 @@ async function forwardToChatwoot(body: unknown, chatwootUrl: string): Promise<vo
 
   await axios.post(chatwootUrl, payload, {
     headers: { 'Content-Type': 'application/json' },
-    timeout: 10000,
+    timeout: config.CHATWOOT_API_TIMEOUT_MS,
     httpAgent: keepAliveHttpAgent,
     httpsAgent: keepAliveHttpsAgent,
   });

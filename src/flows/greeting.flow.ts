@@ -26,7 +26,7 @@ function loginButton(label: string, url: string, chatId: number): InlineKeyboard
 }
 
 const WELCOME_NO_XETUX =
-  '¡Bienvenido a Xetux! 🚀\n\n' +
+  `¡Bienvenido a ${config.COMPANY_NAME}! 🚀\n\n` +
   'Para comenzar, inicia sesión tocando el botón de abajo.\n' +
   'Luego usa el menú para seleccionar el departamento con el que deseas comunicarte.';
 

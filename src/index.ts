@@ -29,7 +29,7 @@ const app = Fastify({ logger: false });
 
 // Rate limiting — protects against webhook floods
 await app.register(rateLimit, {
-  max: 300,
+  max: config.RATE_LIMIT_MAX,
   timeWindow: '1 minute',
   allowList: (req) => req.url?.startsWith('/health') ?? false,
 });

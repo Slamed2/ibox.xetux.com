@@ -3,6 +3,7 @@ import { withExecutionLog } from '../services/execution-log.service.js';
 import { bot, wasBotAssignment, markBotAssignment } from '../services/telegram.service.js';
 import { TEAM_LABELS, TEAM_NAMES } from '../services/department-menu.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
+import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 
 export async function handleConversationUpdated(payload: ChatwootWebhookPayload) {
@@ -92,7 +93,7 @@ async function handleAssigneeChange(conversation: any, telegramUserId: number | 
       const teamName = teamId ? (TEAM_NAMES[teamId] ?? '') : '';
       const areaText = teamName ? ` del área de *${teamName}*` : '';
 
-      const message = `👋 Mi nombre es *${agentName}*${areaText} de Xetux y estaré encantado de atenderte.`;
+      const message = `👋 Mi nombre es *${agentName}*${areaText} de ${config.COMPANY_NAME} y estaré encantado de atenderte.`;
 
       let telegramMessageId: number | undefined;
       if (telegramUserId) {
@@ -101,7 +102,7 @@ async function handleAssigneeChange(conversation: any, telegramUserId: number | 
       }
 
       await chatwootService.sendMessage(conversation.id, {
-        content: `👋 Mi nombre es ${agentName}${teamName ? ` del área de ${teamName}` : ''} de Xetux y estaré encantado de atenderte.`,
+        content: `👋 Mi nombre es ${agentName}${teamName ? ` del área de ${teamName}` : ''} de ${config.COMPANY_NAME} y estaré encantado de atenderte.`,
         message_type: 'outgoing',
         ...(telegramMessageId ? { source_id: String(telegramMessageId) } : {}),
       });

@@ -33,8 +33,8 @@ bot.api.config.use((prev, method, payload, signal) => {
 
 // Retry transformer — wraps all outgoing Telegram API calls with exponential backoff
 bot.api.config.use(async (prev, method, payload, signal) => {
-  const maxRetries = 3;
-  const baseDelay = 500;
+  const maxRetries = config.TELEGRAM_API_RETRIES;
+  const baseDelay = config.TELEGRAM_API_BASE_DELAY_MS;
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -104,7 +104,7 @@ async function saveGroupMigrations(): Promise<void> {
 export function registerGroupMigration(oldId: number, newId: number): void {
   groupMigrations.set(oldId, newId);
   logger.info({ oldId, newId }, 'Group migration registered');
-  saveGroupMigrations();
+  saveGroupMigrations().catch(err => logger.error({ err }, 'Failed to persist group migration'));
 }
 
 export function getMigratedGroupId(chatId: number): number {

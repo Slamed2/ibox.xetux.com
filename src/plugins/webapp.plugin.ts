@@ -10,6 +10,7 @@ import { chatwootService } from '../services/chatwoot.service.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
 import { bot, enableUserCommands } from '../services/telegram.service.js';
 import { TEAMS } from '../services/department-menu.js';
+import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 
 interface RegisterBody {
@@ -74,7 +75,7 @@ const WEBAPP_HTML = `<!DOCTYPE html>
 <body>
     <div id="form-container">
         <div class="logo">
-            <img src="https://www.xetux.com/wp-content/uploads/2023/08/logo_xetux.svg" alt="Xetux">
+            <img src="${config.LOGO_URL}" alt="${config.COMPANY_NAME}">
         </div>
         <h1>Datos de Contacto</h1>
         <p class="subtitle">Completa tus datos para continuar</p>
@@ -301,7 +302,7 @@ const WEBAPP_HTML = `<!DOCTYPE html>
             .then(function(res) {
                 tg.MainButton.hideProgress();
                 if (res.ok) {
-                    tg.showAlert('Sesión iniciada correctamente. ¡Bienvenido a Xetux!');
+                    tg.showAlert('Sesión iniciada correctamente. ¡Bienvenido a ${config.COMPANY_NAME}!');
                     setTimeout(function() { tg.close(); }, 1500);
                 } else {
                     res.json().then(function(j) {
@@ -379,7 +380,7 @@ const STANDALONE_LOGIN_HTML = `<!DOCTYPE html>
 <body>
     <div id="form-container">
         <div class="logo">
-            <img src="https://www.xetux.com/wp-content/uploads/2023/08/logo_xetux.svg" alt="Xetux">
+            <img src="${config.LOGO_URL}" alt="${config.COMPANY_NAME}">
         </div>
         <h1>Datos de Contacto</h1>
         <p class="subtitle">Completa tus datos para continuar</p>
