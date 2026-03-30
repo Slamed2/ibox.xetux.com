@@ -379,8 +379,8 @@ bot.on('callback_query:data', async (ctx) => {
       async () => {
         await ctx.answerCallbackQuery();
 
-        // Log button press in Chatwoot as incoming message
-        await logUserActionToChatwoot(lookupId, `Seleccionó: ${teamLabel}`, ctx.from?.first_name ?? 'Unknown');
+        // Button press is forwarded to Chatwoot as synthetic message (via telegram.plugin.ts)
+        // so we don't need to manually log it here.
 
         const conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
 

@@ -105,20 +105,53 @@ function transformGroupMessage(body: unknown): unknown {
 }
 
 /**
+ * Convert a callback_query into a synthetic message update.
+ * This lets Chatwoot process it like a regular message in the correct conversation.
+ */
+function callbackToMessage(update: any): any {
+  const cb = update.callback_query;
+  if (!cb?.message?.chat) return null;
+
+  const data = cb.data ?? '';
+  // Extract human-readable label from callback data (e.g., "team:2:Soporte" → "Seleccionó: Soporte")
+  const parts = data.split(':');
+  const label = parts.length >= 3 ? `Seleccionó: ${parts.slice(2).join(':')}` : data;
+
+  return {
+    update_id: update.update_id,
+    message: {
+      message_id: cb.message.message_id,
+      from: cb.from,
+      chat: cb.message.chat,
+      date: Math.floor(Date.now() / 1000),
+      text: label,
+    },
+  };
+}
+
+/**
  * Forward Telegram webhook payload to Chatwoot (fire-and-forget).
- * Skip callback_query — Chatwoot can't process them and they cause duplicate conversations.
+ * For callback_query: converts to a synthetic message so Chatwoot can process it.
+ * Group messages/callbacks get transformed (from.id = chat.id, type = private).
  */
 function forwardToChatwoot(body: unknown, chatwootUrl: string) {
   const update = body as any;
-  // Skip callback_query — Chatwoot can't process them
+
+  let payload: unknown;
   if (update?.callback_query) {
-    logger.debug('Skipping callback_query forward to Chatwoot');
-    return;
+    // Convert callback to synthetic message, then transform if from group
+    const synthetic = callbackToMessage(update);
+    if (!synthetic) {
+      logger.debug('Skipping callback_query without message context');
+      return;
+    }
+    payload = transformGroupMessage(synthetic);
+  } else {
+    // Regular messages (including commands) — transform if from group
+    payload = transformGroupMessage(body);
   }
-  // All messages (including commands) are forwarded to Chatwoot.
-  // Group messages get transformed (from.id = chat.id, type = private).
-  const transformed = transformGroupMessage(body);
-  axios.post(chatwootUrl, transformed, {
+
+  axios.post(chatwootUrl, payload, {
     headers: { 'Content-Type': 'application/json' },
     timeout: 5000,
   }).then(() => {
