@@ -57,11 +57,9 @@ function transformGroupMessage(body: unknown): unknown {
   const senderName = tMsg.from?.first_name ?? tMsg.from?.username ?? 'Unknown';
   const groupTitle = tMsg.chat.title ?? 'Sin nombre';
 
-  // Make it look like a private chat tied to the sender
+  // Make it look like a private chat but keep group ID for responses
   tMsg.chat.type = 'private';
-  tMsg.chat.id = tMsg.from.id;
   tMsg.chat.first_name = `Grupo ${groupTitle}`;
-  tMsg.chat.username = tMsg.from.username;
   delete tMsg.chat.title;
 
   // Prefix message with sender name
