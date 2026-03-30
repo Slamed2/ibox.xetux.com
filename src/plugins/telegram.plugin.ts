@@ -13,6 +13,18 @@ export const telegramPlugin: FastifyPluginAsync = async (fastify) => {
   const chatwootTelegramWebhook = `${config.CHATWOOT_BASE_URL}/webhooks/telegram/${config.TELEGRAM_BOT_TOKEN}`;
 
   fastify.post(webhookPath, async (request, reply) => {
+    const update = request.body as any;
+    const msg = update?.message ?? update?.edited_message;
+    logger.debug({
+      updateId: update?.update_id,
+      chatType: msg?.chat?.type,
+      chatId: msg?.chat?.id,
+      fromId: msg?.from?.id,
+      text: msg?.text?.substring(0, 50),
+      hasMessage: !!update?.message,
+      hasEditedMessage: !!update?.edited_message,
+    }, 'Telegram webhook received');
+
     // 1. Forward to Chatwoot first (fire-and-forget so it creates the conversation)
     forwardToChatwoot(request.body, chatwootTelegramWebhook);
 
