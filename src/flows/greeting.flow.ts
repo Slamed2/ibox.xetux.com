@@ -8,8 +8,12 @@ import { InlineKeyboard } from 'grammy';
 
 const WEBAPP_BASE_URL = (process.env.WEBHOOK_BASE_URL ?? 'https://xetux2-inbox.zbawxh.easypanel.host') + '/webapp';
 
-/** Build login keyboard — always use WebApp button. */
-function loginButton(label: string, url: string): InlineKeyboard {
+/** WebApp buttons don't work in groups — use URL button that opens standalone page. */
+function loginButton(label: string, url: string, chatId: number): InlineKeyboard {
+  if (chatId < 0) {
+    // Group: open standalone login page via URL
+    return new InlineKeyboard().url(label, url.replace('/webapp?', '/webapp/login?'));
+  }
   return new InlineKeyboard().webApp(label, url);
 }
 
@@ -87,7 +91,7 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
 
       if (!effectiveXetuxId) {
         // No xetux_id: send login button + greeting
-        const loginKeyboard = loginButton('🔑 Iniciar sesión', webappUrl);
+        const loginKeyboard = loginButton('🔑 Iniciar sesión', webappUrl, telegramUserId!);
 
         const sentMsg = await bot.api.sendMessage(telegramUserId, WELCOME_NO_XETUX, {
           reply_markup: loginKeyboard,
@@ -102,7 +106,7 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
         });
       } else if (deepLinkXetuxId && !xetuxId) {
         // Deep link: xetux_id known but need to complete registration — show webapp + greeting
-        const loginKeyboard = loginButton('🔑 Completar registro', webappUrl);
+        const loginKeyboard = loginButton('🔑 Completar registro', webappUrl, telegramUserId!);
 
         const sentMsg = await bot.api.sendMessage(telegramUserId, WELCOME_NO_XETUX, {
           reply_markup: loginKeyboard,

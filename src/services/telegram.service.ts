@@ -157,7 +157,10 @@ bot.command('registro', async (ctx) => {
 
       const webappUrl = `${WEBAPP_BASE_URL}?contact_id=${contactId}&conversation_id=${conversationId ?? ''}`;
 
-      const keyboard = new InlineKeyboard().webApp('🔑 Iniciar sesión', webappUrl);
+      // WebApp buttons don't work in groups — open standalone login page instead
+      const keyboard = isGroupChat(ctx)
+        ? new InlineKeyboard().url('🔑 Iniciar sesión', webappUrl.replace('/webapp?', '/webapp/login?'))
+        : new InlineKeyboard().webApp('🔑 Iniciar sesión', webappUrl);
 
       // Check if this is a new conversation (no messages yet or just the /start)
       const isNewConversation = conversation && !conversation.team_id && conversation.messages_count <= 2;
@@ -240,7 +243,10 @@ async function handleDepartmentCommand(ctx: any, command: string, displayName: s
       // No xetux_id — show login button
       const contactId = conversation?.meta?.sender?.id ?? '';
       const webappUrl = `${WEBAPP_BASE_URL}?contact_id=${contactId}&conversation_id=${conversationId ?? ''}`;
-      const keyboard = new InlineKeyboard().webApp('🔑 Iniciar sesión', webappUrl);
+      // WebApp buttons don't work in groups — open standalone login page instead
+      const keyboard = isGroupChat(ctx)
+        ? new InlineKeyboard().url('🔑 Iniciar sesión', webappUrl.replace('/webapp?', '/webapp/login?'))
+        : new InlineKeyboard().webApp('🔑 Iniciar sesión', webappUrl);
       await ctx.reply('Para usar los departamentos primero debes iniciar sesión.', { reply_markup: keyboard });
       return { action: 'login_required', department: command };
     },
