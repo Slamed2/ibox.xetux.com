@@ -155,12 +155,10 @@ async function handleTeamSelection(
       // Assign team
       await chatwootService.assignConversation(conversationId, { team_id: selection.teamId });
 
-      // Manage labels
+      // Manage labels (atomic: remove all old department labels + add new one in single call)
       const teamLabelTag = TEAM_LABELS[selection.teamId];
       if (teamLabelTag) {
-        const oldLabels = ALL_DEPARTMENT_LABELS.filter(l => l !== teamLabelTag);
-        await chatwootService.removeLabels(conversationId, oldLabels);
-        await chatwootService.addLabels(conversationId, [teamLabelTag]);
+        await chatwootService.replaceDepartmentLabel(conversationId, teamLabelTag, ALL_DEPARTMENT_LABELS);
       }
 
       // Send confirmation to Telegram
@@ -277,12 +275,10 @@ async function handleDepartmentCommand(
         markBotAssignment(conversationId);
         await chatwootService.assignConversation(conversationId, { team_id: resolved.teamId });
 
-        // Manage labels
+        // Manage labels (atomic: remove all old department labels + add new one in single call)
         const teamLabelTag = TEAM_LABELS[resolved.teamId];
         if (teamLabelTag) {
-          const oldLabels = ALL_DEPARTMENT_LABELS.filter(l => l !== teamLabelTag);
-          await chatwootService.removeLabels(conversationId, oldLabels);
-          await chatwootService.addLabels(conversationId, [teamLabelTag]);
+          await chatwootService.replaceDepartmentLabel(conversationId, teamLabelTag, ALL_DEPARTMENT_LABELS);
         }
 
         // Send confirmation

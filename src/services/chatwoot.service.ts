@@ -85,6 +85,26 @@ class ChatwootService {
     return data;
   }
 
+  /**
+   * Atomically replace department labels: remove all old department labels and add the new one
+   * in a single API call to avoid race conditions.
+   */
+  async replaceDepartmentLabel(conversationId: number, newLabel: string, allDepartmentLabels: string[]) {
+    const conversation = await this.getConversation(conversationId);
+    const currentLabels: string[] = conversation.labels ?? [];
+    // Remove all department labels, then add the new one
+    const filtered = currentLabels.filter(l => !allDepartmentLabels.includes(l));
+    filtered.push(newLabel);
+    const uniqueLabels = [...new Set(filtered)];
+
+    logger.debug({ conversationId, newLabel, before: currentLabels, after: uniqueLabels }, 'Replacing department label');
+    const { data } = await this.client.post(
+      `/conversations/${conversationId}/labels`,
+      { labels: uniqueLabels },
+    );
+    return data;
+  }
+
   async getConversation(conversationId: number) {
     const { data } = await this.client.get(`/conversations/${conversationId}`);
     return data;
