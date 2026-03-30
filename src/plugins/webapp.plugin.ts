@@ -337,7 +337,7 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
           const country = isMX ? 'Mexico' : 'Venezuela';
           const countryCode = isMX ? 'MX' : 'VE';
 
-          // Update Chatwoot contact — if email/phone conflict, still sync xetux_id + country
+          // Update Chatwoot contact — try full update, fallback field by field on conflict
           try {
             await chatwootService.updateContact(contactIdNum, {
               name: nombre,
@@ -347,12 +347,22 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
               custom_attributes: { xetux_id },
             });
           } catch (updateErr) {
-            logger.warn({ err: updateErr, contactId: contact_id }, 'Full contact update failed, syncing xetux_id only');
-            await chatwootService.updateContact(contactIdNum, {
-              name: nombre,
-              additional_attributes: { country, country_code: countryCode },
-              custom_attributes: { xetux_id },
-            });
+            logger.warn({ err: updateErr, contactId: contact_id }, 'Full contact update failed, trying without phone');
+            try {
+              await chatwootService.updateContact(contactIdNum, {
+                name: nombre,
+                email,
+                additional_attributes: { country, country_code: countryCode },
+                custom_attributes: { xetux_id },
+              });
+            } catch (updateErr2) {
+              logger.warn({ err: updateErr2, contactId: contact_id }, 'Update without phone failed, trying without email');
+              await chatwootService.updateContact(contactIdNum, {
+                name: nombre,
+                additional_attributes: { country, country_code: countryCode },
+                custom_attributes: { xetux_id },
+              });
+            }
           }
 
           // Add country label to conversation
