@@ -2,6 +2,7 @@ import { chatwootService } from '../services/chatwoot.service.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
 import { bot, enableUserCommands, resetUserCommands, consumePendingDeepLinkXetuxId } from '../services/telegram.service.js';
 import { MENU_TEXT, TEAMS } from '../services/department-menu.js';
+import { wasRecentGroupSender } from '../plugins/telegram.plugin.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { logger } from '../utils/logger.js';
 import { InlineKeyboard } from 'grammy';
@@ -35,6 +36,15 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
   const telegramUserId = contact?.additional_attributes?.social_telegram_user_id as number | undefined;
 
   logger.info({ telegramUserId, xetuxId, conversationId: conversation.id }, 'Greeting flow: conversation created');
+
+  // Suppress duplicate greeting for private chats when the user just sent a group message.
+  // When a group message is forwarded to Chatwoot (transformed), Chatwoot may also create/reopen
+  // a private conversation for the same user, firing a second conversation_created event.
+  // We only want the GROUP greeting, not the private one.
+  if (telegramUserId && telegramUserId > 0 && wasRecentGroupSender(telegramUserId)) {
+    logger.info({ telegramUserId, conversationId: conversation.id }, 'Greeting flow: suppressed — user recently sent a group message');
+    return;
+  }
 
   await withExecutionLog(
     {
