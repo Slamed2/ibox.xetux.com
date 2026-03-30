@@ -110,11 +110,6 @@ bot.command('start', async (ctx) => {
       metadata: { chatType: ctx.chat.type, username: ctx.from?.username ?? null },
     },
     async () => {
-      // Log command in Chatwoot for groups (raw command isn't forwarded)
-      if (isGroupChat(ctx)) {
-        await logUserActionToChatwoot(lookupId, text || '/start', ctx.from?.first_name ?? 'Unknown', ctx.message?.message_id);
-      }
-
       // Check for deep link: /start XETUXID-VE00029 or XETUXID_MX00023
       // Format: 2 letters (MX/VE) + 5 digits
       const match = text.match(/XETUXID[-_]+([A-Za-z]{2}\d{5})/);
@@ -179,11 +174,6 @@ bot.command('registro', async (ctx) => {
       metadata: { username: ctx.from?.username ?? null, chatType: ctx.chat.type },
     },
     async () => {
-      // Log command in Chatwoot for groups
-      if (isGroupChat(ctx)) {
-        await logUserActionToChatwoot(lookupId, '/registro', ctx.from?.first_name ?? 'Unknown', ctx.message?.message_id);
-      }
-
       // Find conversation and contact in Chatwoot
       const conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
       const conversation = conversationId ? await chatwootService.getConversation(conversationId) : null;
@@ -257,11 +247,6 @@ async function handleDepartmentCommand(ctx: any, command: string, displayName: s
       metadata: { command, username: ctx.from?.username ?? null, chatType: ctx.chat?.type },
     },
     async () => {
-      // Log command in Chatwoot for groups
-      if (isGroupChat(ctx)) {
-        await logUserActionToChatwoot(lookupId, `/${command}`, ctx.from?.first_name ?? 'Unknown', ctx.message?.message_id);
-      }
-
       if (!COUNTRY_COMMANDS[command]) {
         return { action: 'unknown_command', command };
       }

@@ -115,16 +115,8 @@ function forwardToChatwoot(body: unknown, chatwootUrl: string) {
     logger.debug('Skipping callback_query forward to Chatwoot');
     return;
   }
-  // Skip bot commands in groups — grammY handles them and syncs to Chatwoot.
-  // In private chats, commands must reach Chatwoot to create conversations (/start).
-  const msg = update?.message ?? update?.edited_message;
-  const chatType = msg?.chat?.type;
-  const text = msg?.text ?? '';
-  const isGroup = chatType === 'group' || chatType === 'supergroup';
-  if (isGroup && text.startsWith('/')) {
-    logger.debug({ text: text.substring(0, 30) }, 'Skipping group command forward to Chatwoot');
-    return;
-  }
+  // All messages (including commands) are forwarded to Chatwoot.
+  // Group messages get transformed (from.id = chat.id, type = private).
   const transformed = transformGroupMessage(body);
   axios.post(chatwootUrl, transformed, {
     headers: { 'Content-Type': 'application/json' },
