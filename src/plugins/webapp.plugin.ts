@@ -17,6 +17,7 @@ interface RegisterBody {
   telefono: string;
   email: string;
   xetux_id: string;
+  empresa?: string;
   contact_id: string;
   conversation_id: string;
   telegram_user?: { id: number; first_name: string; last_name?: string; username?: string } | null;
@@ -406,6 +407,11 @@ const STANDALONE_LOGIN_HTML = `<!DOCTYPE html>
                 <input type="text" id="xetux_id" placeholder="Ej: VE00029 o MX00023" required autocapitalize="characters" maxlength="7">
                 <div class="error-text" id="xetux_id-error">Formato: 2 letras (MX o VE) + 5 digitos. Ej: VE00029</div>
             </div>
+            <div class="form-group">
+                <label for="empresa">Empresa *</label>
+                <input type="text" id="empresa" placeholder="Ej: Mi Empresa C.A." required>
+                <div class="error-text" id="empresa-error">Este campo es obligatorio</div>
+            </div>
             <button type="button" class="submit-btn" id="submit-btn">Enviar datos</button>
         </form>
     </div>
@@ -493,6 +499,8 @@ const STANDALONE_LOGIN_HTML = `<!DOCTYPE html>
             var xetux_id = document.getElementById('xetux_id');
             var regex = /^(?:MX|VE)\\d{5}$/;
             if (!regex.test(xetux_id.value.trim())) { xetux_id.classList.add('error'); document.getElementById('xetux_id-error').classList.add('visible'); valid = false; }
+            var empresa = document.getElementById('empresa');
+            if (!empresa.value.trim()) { empresa.classList.add('error'); document.getElementById('empresa-error').classList.add('visible'); valid = false; }
             return valid;
         }
 
@@ -506,6 +514,7 @@ const STANDALONE_LOGIN_HTML = `<!DOCTYPE html>
                 telefono: iti.getNumber() || document.getElementById('telefono').value.trim(),
                 email: document.getElementById('email').value.trim(),
                 xetux_id: document.getElementById('xetux_id').value.trim(),
+                empresa: document.getElementById('empresa').value.trim(),
                 contact_id: contactId,
                 conversation_id: conversationId,
                 telegram_user: null
@@ -564,7 +573,7 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
 
   // Handle form submission — update Chatwoot contact
   fastify.post<{ Body: RegisterBody }>('/api/webapp/register', async (request, reply) => {
-    const { nombre, telefono, email, xetux_id, contact_id, conversation_id, telegram_user } = request.body;
+    const { nombre, telefono, email, xetux_id, empresa, contact_id, conversation_id, telegram_user } = request.body;
 
     if (!contact_id || !conversation_id) {
       reply.code(400);
@@ -595,6 +604,10 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
           const country = isMX ? 'Mexico' : 'Venezuela';
           const countryCode = isMX ? 'MX' : 'VE';
 
+          // Build custom attributes — include empresa if provided (groups)
+          const customAttrs: Record<string, string> = { xetux_id };
+          if (empresa) customAttrs.empresa = empresa;
+
           // Update Chatwoot contact — try full update, fallback field by field on conflict
           try {
             await chatwootService.updateContact(contactIdNum, {
@@ -602,7 +615,7 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
               email,
               phone_number: telefono,
               additional_attributes: { country, country_code: countryCode },
-              custom_attributes: { xetux_id },
+              custom_attributes: customAttrs,
             });
           } catch (updateErr) {
             logger.warn({ err: updateErr, contactId: contact_id }, 'Full contact update failed, trying without phone');
@@ -611,14 +624,14 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
                 name: nombre,
                 email,
                 additional_attributes: { country, country_code: countryCode },
-                custom_attributes: { xetux_id },
+                custom_attributes: customAttrs,
               });
             } catch (updateErr2) {
               logger.warn({ err: updateErr2, contactId: contact_id }, 'Update without phone failed, trying without email');
               await chatwootService.updateContact(contactIdNum, {
                 name: nombre,
                 additional_attributes: { country, country_code: countryCode },
-                custom_attributes: { xetux_id },
+                custom_attributes: customAttrs,
               });
             }
           }
@@ -627,8 +640,10 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
           await chatwootService.addLabels(conversationIdNum, [isMX ? 'mexico' : 'venezuela']);
 
           // Send registration details as internal note in Chatwoot
+          const regDetails = [`✅ Registro completado:`, `• Nombre: ${nombre}`, `• Teléfono: ${telefono}`, `• Email: ${email}`, `• Xetux ID: ${xetux_id}`];
+          if (empresa) regDetails.push(`• Empresa: ${empresa}`);
           await chatwootService.sendMessage(conversationIdNum, {
-            content: `✅ Registro completado:\n• Nombre: ${nombre}\n• Teléfono: ${telefono}\n• Email: ${email}\n• Xetux ID: ${xetux_id}`,
+            content: regDetails.join('\n'),
             private: true,
             message_type: 'outgoing',
           });
