@@ -20,11 +20,15 @@ export const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
  * In private chats: from.id (the user).
  * In groups/supergroups: chat.id (the group) — because the transformation
  * sets from.id = chat.id so Chatwoot indexes by group ID.
- * Also checks callbackQuery.message.chat for callback contexts.
+ * For callbacks: checks callbackQuery.message.chat.
+ * Negative chat IDs always indicate a group.
  */
 function chatwootLookupId(ctx: any): number {
-  // Try ctx.chat first, then callbackQuery.message.chat for callbacks
   const chat = ctx.chat ?? ctx.callbackQuery?.message?.chat;
+  // Negative chat ID = group/supergroup
+  if (chat?.id && chat.id < 0) {
+    return chat.id;
+  }
   const chatType = chat?.type;
   if (chatType === 'group' || chatType === 'supergroup') {
     return chat.id;
@@ -36,7 +40,9 @@ function chatwootLookupId(ctx: any): number {
  * Check if the current context is a group/supergroup chat.
  */
 function isGroupChat(ctx: any): boolean {
-  const chatType = ctx.chat?.type ?? ctx.callbackQuery?.message?.chat?.type;
+  const chat = ctx.chat ?? ctx.callbackQuery?.message?.chat;
+  if (chat?.id && chat.id < 0) return true;
+  const chatType = chat?.type;
   return chatType === 'group' || chatType === 'supergroup';
 }
 
