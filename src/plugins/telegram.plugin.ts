@@ -114,6 +114,13 @@ function forwardToChatwoot(body: unknown, chatwootUrl: string) {
     logger.debug('Skipping callback_query forward to Chatwoot');
     return;
   }
+  // Skip bot commands — grammY handles them and syncs to Chatwoot directly
+  const msg = update?.message ?? update?.edited_message;
+  const text = msg?.text ?? '';
+  if (text.startsWith('/')) {
+    logger.debug({ text: text.substring(0, 30) }, 'Skipping bot command forward to Chatwoot');
+    return;
+  }
   const transformed = transformGroupMessage(body);
   axios.post(chatwootUrl, transformed, {
     headers: { 'Content-Type': 'application/json' },
