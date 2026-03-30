@@ -336,6 +336,16 @@ bot.on('callback_query:data', async (ctx) => {
   const userId = ctx.from.id;
   const lookupId = chatwootLookupId(ctx);
 
+  logger.info({
+    userId,
+    lookupId,
+    ctxChatId: ctx.chat?.id,
+    ctxChatType: ctx.chat?.type,
+    cbMsgChatId: ctx.callbackQuery?.message?.chat?.id,
+    cbMsgChatType: ctx.callbackQuery?.message?.chat?.type,
+    data,
+  }, 'Callback query context debug');
+
   if (data.startsWith('team:')) {
     const parts = data.split(':');
     const teamId = parseInt(parts[1], 10);
