@@ -533,8 +533,13 @@ export async function setupTelegramWebhook(webhookUrl: string) {
 /**
  * Enable department commands in the hamburger menu for a specific user.
  * Call this after registration.
+ * Skips groups (negative IDs) — they use the global all_group_chats scope.
  */
 export async function enableUserCommands(telegramUserId: number) {
+  if (telegramUserId < 0) {
+    logger.debug({ telegramUserId }, 'Skipping enableUserCommands for group chat');
+    return;
+  }
   await bot.api.setMyCommands(BOT_COMMANDS, {
     scope: { type: 'chat', chat_id: telegramUserId },
   });
@@ -544,8 +549,13 @@ export async function enableUserCommands(telegramUserId: number) {
 /**
  * Reset commands to guest menu (registro only) for a specific user.
  * Call this when a contact is deleted or xetux_id is removed.
+ * Skips groups (negative IDs) — they use the global all_group_chats scope.
  */
 export async function resetUserCommands(telegramUserId: number) {
+  if (telegramUserId < 0) {
+    logger.debug({ telegramUserId }, 'Skipping resetUserCommands for group chat');
+    return;
+  }
   await bot.api.setMyCommands(GUEST_COMMANDS, {
     scope: { type: 'chat', chat_id: telegramUserId },
   });
