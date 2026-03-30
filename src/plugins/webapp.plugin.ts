@@ -29,6 +29,8 @@ const WEBAPP_HTML = `<!DOCTYPE html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Registro - Xetux</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/css/intlTelInput.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/intlTelInput.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body { width: 100%; height: 100%; overflow-x: hidden; }
@@ -54,6 +56,18 @@ const WEBAPP_HTML = `<!DOCTYPE html>
         .tooltip-bottom { padding: 16px 20px; text-align: center; flex-shrink: 0; }
         .tooltip-bottom p { color: #fff; font-size: 14px; max-width: 300px; line-height: 1.5; margin: 0 auto 12px; }
         .tooltip-bottom .close-btn { padding: 10px 32px; background: #e1983d; color: #000; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+        .iti { width: 100%; }
+        .iti__flag-container { border-radius: 10px 0 0 10px; }
+        .iti__selected-flag { background: transparent !important; padding-left: 14px; }
+        .iti__arrow { border-top-color: #aaa; }
+        .iti__arrow--up { border-bottom-color: #aaa; }
+        .iti__country-list { background-color: #1a1a1a; border: 1px solid #333; border-radius: 8px; color: #fff; max-height: 200px; }
+        .iti__country.iti__highlight { background-color: #333; }
+        .iti__country-name, .iti__dial-code { color: #fff; }
+        .iti__divider { border-bottom-color: #333; }
+        .iti input { padding-left: 52px !important; }
+        .iti--separate-dial-code .iti__selected-flag { background: #1a1a1a !important; border-radius: 10px 0 0 10px; border-right: 1px solid #333; }
+        .iti--separate-dial-code input { padding-left: 90px !important; }
     </style>
 </head>
 <body>
@@ -71,7 +85,7 @@ const WEBAPP_HTML = `<!DOCTYPE html>
             </div>
             <div class="form-group">
                 <label for="telefono">Teléfono *</label>
-                <input type="tel" id="telefono" placeholder="Ej: +58 412 1234567" required>
+                <input type="tel" id="telefono" placeholder="412 1234567" required>
                 <div class="error-text" id="telefono-error">Ingresa un número de teléfono válido</div>
             </div>
             <div class="form-group">
@@ -106,6 +120,24 @@ const WEBAPP_HTML = `<!DOCTYPE html>
         tg.MainButton.color = '#e1983d';
         tg.MainButton.textColor = '#000000';
         tg.MainButton.show();
+
+        // Initialize intl-tel-input on phone field
+        var phoneInput = document.getElementById('telefono');
+        var iti = window.intlTelInput(phoneInput, {
+            preferredCountries: ['ve', 'mx'],
+            initialCountry: 'auto',
+            geoIpLookup: function(cb) {
+                fetch('https://ipapi.co/json/')
+                    .then(function(r) { return r.json(); })
+                    .then(function(d) { cb(d && d.country ? d.country : 'VE'); })
+                    .catch(function() { cb('VE'); });
+            },
+            nationalMode: true,
+            formatOnDisplay: false,
+            autoPlaceholder: 'aggressive',
+            separateDialCode: true,
+            utilsScript: 'https://cdnjs.cloudflare.com/ajax/libs/intl-tel-input/17.0.8/js/utils.js'
+        });
 
         var params = new URLSearchParams(window.location.search);
         var contactId = params.get('contact_id');
@@ -252,7 +284,7 @@ const WEBAPP_HTML = `<!DOCTYPE html>
             tg.MainButton.showProgress();
             var data = {
                 nombre: document.getElementById('nombre').value.trim(),
-                telefono: document.getElementById('telefono').value.trim(),
+                telefono: iti.getNumber() || document.getElementById('telefono').value.trim(),
                 email: document.getElementById('email').value.trim(),
                 xetux_id: document.getElementById('xetux_id').value.trim(),
                 contact_id: contactId,
