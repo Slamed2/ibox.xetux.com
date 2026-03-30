@@ -27,6 +27,7 @@ const EVENT_TYPES = [
 
 const STATUSES = ['', 'pending', 'success', 'error'];
 const DIRECTIONS = ['', 'inbound', 'outbound'];
+const CHAT_TYPES = ['', 'private', 'group', 'supergroup', 'channel'];
 
 export function Filters({ filters, onChange }: FiltersProps) {
   return (
@@ -80,6 +81,20 @@ export function Filters({ filters, onChange }: FiltersProps) {
           <option value="">All</option>
           {DIRECTIONS.filter(Boolean).map((d) => (
             <option key={d} value={d}>{d === 'inbound' ? '↓ Inbound' : '↑ Outbound'}</option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-xs text-gray-500 mb-1">Chat Type</label>
+        <select
+          value={filters.chatType ?? ''}
+          onChange={(e) => onChange({ ...filters, chatType: e.target.value || undefined, page: 1 })}
+          className="border rounded px-3 py-1.5 text-sm bg-white"
+        >
+          <option value="">All</option>
+          {CHAT_TYPES.filter(Boolean).map((t) => (
+            <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
           ))}
         </select>
       </div>

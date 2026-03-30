@@ -20,6 +20,7 @@ export interface LogFilters {
   eventType?: string;
   status?: string;
   direction?: string;
+  chatType?: string;
   search?: string;
   conversationId?: string;
   dateFrom?: string;

@@ -36,6 +36,7 @@ export interface LogFilters {
   direction?: string;
   search?: string;
   conversationId?: string;
+  chatType?: string;
   dateFrom?: string;
   dateTo?: string;
   page?: number;

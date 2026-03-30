@@ -75,6 +75,9 @@ export async function queryLogs(filters: LogFilters) {
   if (filters.conversationId) {
     conditions.push(eq(executionLogs.conversationId, filters.conversationId));
   }
+  if (filters.chatType) {
+    conditions.push(sql`${executionLogs.metadata}->>'chatType' = ${filters.chatType}`);
+  }
   if (filters.search) {
     const term = `%${filters.search}%`;
     conditions.push(

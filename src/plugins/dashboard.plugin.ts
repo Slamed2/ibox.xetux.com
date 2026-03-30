@@ -16,6 +16,7 @@ export const dashboardPlugin: FastifyPluginAsync = async (fastify) => {
       eventType?: string;
       status?: string;
       direction?: string;
+      chatType?: string;
       search?: string;
       conversationId?: string;
       dateFrom?: string;
@@ -24,11 +25,12 @@ export const dashboardPlugin: FastifyPluginAsync = async (fastify) => {
       limit?: string;
     };
   }>('/api/logs', async (request) => {
-    const { eventType, status, direction, search, conversationId, dateFrom, dateTo, page, limit } = request.query;
+    const { eventType, status, direction, chatType, search, conversationId, dateFrom, dateTo, page, limit } = request.query;
     return queryLogs({
       eventType,
       status,
       direction,
+      chatType,
       search,
       conversationId,
       dateFrom,
