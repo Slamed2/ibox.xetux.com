@@ -17,15 +17,13 @@ const EVENT_TYPES = [
   'chatwoot:message_created',
   'chatwoot:message_updated',
   'chatwoot:conversation_created',
+  'chatwoot:conversation_updated',
   'chatwoot:conversation_resolved',
   'chatwoot:conversation_status_changed',
   'chatwoot:team_changed',
   'chatwoot:assignee_changed',
   'chatwoot:contact_updated',
   'flow:greeting',
-  'flow:closing',
-  'flow:assignment',
-  'flow:message_update',
   'webapp:register',
 ];
 

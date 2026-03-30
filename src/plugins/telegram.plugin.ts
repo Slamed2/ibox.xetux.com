@@ -52,6 +52,40 @@ export const telegramPlugin: FastifyPluginAsync = async (fastify) => {
 };
 
 /**
+ * Transform a single message object from group/supergroup to look like a private message.
+ * Mutates the message in place — call on a deep clone only.
+ */
+function transformMessage(msg: any): void {
+  if (!msg?.chat) return;
+
+  const senderName = msg.from?.first_name ?? msg.from?.username ?? 'Unknown';
+  const groupTitle = msg.chat.title ?? 'Sin nombre';
+
+  // Convert chat to private type
+  msg.chat.type = 'private';
+  msg.chat.first_name = groupTitle;
+  delete msg.chat.title;
+
+  // Sync from.id with chat.id so the destination bot treats it as a private chat
+  if (msg.from) {
+    msg.from.id = msg.chat.id;
+    delete msg.from.username;
+  }
+
+  // Prefix text/caption with sender name
+  if (msg.text) {
+    msg.text = `${senderName}: ${msg.text}`;
+  }
+  if (msg.caption) {
+    msg.caption = `${senderName}: ${msg.caption}`;
+  }
+
+  // Recursively transform nested messages
+  if (msg.reply_to_message) transformMessage(msg.reply_to_message);
+  if (msg.pinned_message) transformMessage(msg.pinned_message);
+}
+
+/**
  * Transform group/supergroup messages to look like private messages for Chatwoot.
  * The original body is NOT mutated — grammY needs it intact.
  */
@@ -65,22 +99,7 @@ function transformGroupMessage(body: unknown): unknown {
 
   const transformed = JSON.parse(JSON.stringify(body));
   const tMsg = transformed.message ?? transformed.edited_message;
-
-  const senderName = tMsg.from?.first_name ?? tMsg.from?.username ?? 'Unknown';
-  const groupTitle = tMsg.chat.title ?? 'Sin nombre';
-
-  // Make it look like a private chat but keep group ID for responses
-  tMsg.chat.type = 'private';
-  tMsg.chat.first_name = `Grupo ${groupTitle}`;
-  delete tMsg.chat.title;
-
-  // Prefix message with sender name
-  if (tMsg.text) {
-    tMsg.text = `${senderName}: ${tMsg.text}`;
-  }
-  if (tMsg.caption) {
-    tMsg.caption = `${senderName}: ${tMsg.caption}`;
-  }
+  transformMessage(tMsg);
 
   return transformed;
 }

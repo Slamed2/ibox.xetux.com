@@ -15,6 +15,27 @@ import {
 
 export const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 
+/**
+ * Return the ID to use for Chatwoot conversation lookup.
+ * In private chats: from.id (the user).
+ * In groups/supergroups: chat.id (the group) — because the transformation
+ * sets from.id = chat.id so Chatwoot indexes by group ID.
+ */
+function chatwootLookupId(ctx: any): number {
+  const chatType = ctx.chat?.type;
+  if (chatType === 'group' || chatType === 'supergroup') {
+    return ctx.chat.id;
+  }
+  return ctx.from.id;
+}
+
+/**
+ * Check if the current context is a group/supergroup chat.
+ */
+function isGroupChat(ctx: any): boolean {
+  return ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup';
+}
+
 // Track pending department selection per user (waiting for country)
 const pendingDepartment = new Map<number, string>();
 
@@ -53,6 +74,7 @@ export function wasBotAssignment(conversationId: number): boolean {
 bot.command('start', async (ctx) => {
   const text = ctx.message?.text ?? '';
   const userId = ctx.from?.id;
+  const lookupId = chatwootLookupId(ctx);
 
   await withExecutionLog(
     {
@@ -78,7 +100,7 @@ bot.command('start', async (ctx) => {
         setPendingDeepLinkXetuxId(userId, xetuxId);
 
         // Try to update existing contact if found
-        const conversationId = await chatwootService.findConversationByTelegramUserId(userId);
+        const conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
         const conversation = conversationId ? await chatwootService.getConversation(conversationId) : null;
         const contactId = conversation?.meta?.sender?.id;
 
@@ -117,6 +139,7 @@ const WEBAPP_BASE_URL = (process.env.WEBHOOK_BASE_URL ?? 'https://xetux2-inbox.z
 
 bot.command('registro', async (ctx) => {
   const userId = ctx.from?.id;
+  const lookupId = chatwootLookupId(ctx);
   await withExecutionLog(
     {
       eventType: 'telegram:command_registro',
@@ -124,16 +147,20 @@ bot.command('registro', async (ctx) => {
       direction: 'inbound',
       inputData: { chatId: ctx.chat.id, from: ctx.from },
       contactId: String(userId),
-      metadata: { username: ctx.from?.username ?? null },
+      metadata: { username: ctx.from?.username ?? null, chatType: ctx.chat.type },
     },
     async () => {
       // Find conversation and contact in Chatwoot
-      const conversationId = await chatwootService.findConversationByTelegramUserId(userId!);
+      const conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
       const conversation = conversationId ? await chatwootService.getConversation(conversationId) : null;
       const contactId = conversation?.meta?.sender?.id ?? '';
 
       const webappUrl = `${WEBAPP_BASE_URL}?contact_id=${contactId}&conversation_id=${conversationId ?? ''}`;
-      const keyboard = new InlineKeyboard().webApp('🔑 Iniciar sesión', webappUrl);
+
+      // WebApp buttons don't work in groups — use URL button instead
+      const keyboard = isGroupChat(ctx)
+        ? new InlineKeyboard().url('🔑 Iniciar sesión', webappUrl)
+        : new InlineKeyboard().webApp('🔑 Iniciar sesión', webappUrl);
 
       // Check if this is a new conversation (no messages yet or just the /start)
       const isNewConversation = conversation && !conversation.team_id && conversation.messages_count <= 2;
@@ -184,6 +211,7 @@ bot.command('administracion', async (ctx) => {
 
 async function handleDepartmentCommand(ctx: any, command: string, displayName: string) {
   const userId = ctx.from.id;
+  const lookupId = chatwootLookupId(ctx);
 
   await withExecutionLog(
     {
@@ -192,7 +220,7 @@ async function handleDepartmentCommand(ctx: any, command: string, displayName: s
       direction: 'inbound',
       inputData: { userId, command },
       contactId: String(userId),
-      metadata: { command, username: ctx.from?.username ?? null },
+      metadata: { command, username: ctx.from?.username ?? null, chatType: ctx.chat?.type },
     },
     async () => {
       if (!COUNTRY_COMMANDS[command]) {
@@ -200,7 +228,7 @@ async function handleDepartmentCommand(ctx: any, command: string, displayName: s
       }
 
       // Try to auto-resolve country from xetux_id
-      const conversationId = await chatwootService.findConversationByTelegramUserId(userId);
+      const conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
       const conversation = conversationId ? await chatwootService.getConversation(conversationId) : null;
       const xetuxId = conversation?.meta?.sender?.custom_attributes?.xetux_id as string | undefined;
 
@@ -208,14 +236,17 @@ async function handleDepartmentCommand(ctx: any, command: string, displayName: s
         const countryKey = xetuxId.toUpperCase().startsWith('MX') ? '🇲🇽 México' : '🇻🇪 Venezuela';
         const match = COUNTRY_COMMANDS[command][countryKey];
         if (match) {
-          return await assignTeamAndConfirm(ctx, userId, match.teamId, match.label);
+          return await assignTeamAndConfirm(ctx, lookupId, match.teamId, match.label);
         }
       }
 
       // No xetux_id — show login button
       const contactId = conversation?.meta?.sender?.id ?? '';
       const webappUrl = `${WEBAPP_BASE_URL}?contact_id=${contactId}&conversation_id=${conversationId ?? ''}`;
-      const keyboard = new InlineKeyboard().webApp('🔑 Iniciar sesión', webappUrl);
+      // WebApp buttons don't work in groups — use URL button instead
+      const keyboard = isGroupChat(ctx)
+        ? new InlineKeyboard().url('🔑 Iniciar sesión', webappUrl)
+        : new InlineKeyboard().webApp('🔑 Iniciar sesión', webappUrl);
       await ctx.reply('Para usar los departamentos primero debes iniciar sesión.', { reply_markup: keyboard });
       return { action: 'login_required', department: command };
     },
@@ -228,6 +259,7 @@ bot.on('message:text', async (ctx) => {
   const userId = ctx.from.id;
 
   // Check if it's a country button response
+  const lookupId = chatwootLookupId(ctx);
   if (COUNTRY_BUTTONS.has(text) && pendingDepartment.has(userId)) {
     await withExecutionLog(
       {
@@ -245,7 +277,7 @@ bot.on('message:text', async (ctx) => {
         const countryMap = COUNTRY_COMMANDS[dept];
         if (countryMap?.[text]) {
           const { teamId, label } = countryMap[text];
-          return await assignTeamAndConfirm(ctx, userId, teamId, label);
+          return await assignTeamAndConfirm(ctx, lookupId, teamId, label);
         }
 
         return { action: 'unknown_country', text, dept };
@@ -274,6 +306,7 @@ bot.on('message:text', async (ctx) => {
 bot.on('callback_query:data', async (ctx) => {
   const data = ctx.callbackQuery.data;
   const userId = ctx.from.id;
+  const lookupId = chatwootLookupId(ctx);
 
   if (data.startsWith('team:')) {
     const parts = data.split(':');
@@ -287,12 +320,12 @@ bot.on('callback_query:data', async (ctx) => {
         direction: 'inbound',
         inputData: { userId, data },
         contactId: String(userId),
-        metadata: { teamId, teamLabel, username: ctx.from?.username ?? null },
+        metadata: { teamId, teamLabel, username: ctx.from?.username ?? null, chatType: ctx.chat?.type },
       },
       async () => {
         await ctx.answerCallbackQuery();
 
-        const conversationId = await chatwootService.findConversationByTelegramUserId(userId);
+        const conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
 
         if (conversationId) {
           recentBotAssignments.set(conversationId, Date.now());
@@ -331,6 +364,7 @@ bot.on('callback_query:data', async (ctx) => {
 // Handle edited messages — sync edits to Chatwoot
 bot.on('edited_message:text', async (ctx) => {
   const userId = ctx.from?.id;
+  const lookupId = chatwootLookupId(ctx);
   const editedMsg = ctx.editedMessage;
 
   await withExecutionLog(
@@ -340,10 +374,10 @@ bot.on('edited_message:text', async (ctx) => {
       direction: 'inbound',
       inputData: { userId, messageId: editedMsg.message_id, text: editedMsg.text },
       contactId: String(userId),
-      metadata: { username: ctx.from?.username ?? null },
+      metadata: { username: ctx.from?.username ?? null, chatType: ctx.chat?.type },
     },
     async () => {
-      const conversationId = await chatwootService.findConversationByTelegramUserId(userId!);
+      const conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
       if (!conversationId) return { action: 'no_conversation' };
 
       const chatwootMsg = await chatwootService.findMessageBySourceId(conversationId, String(editedMsg.message_id));
@@ -377,11 +411,11 @@ bot.on('message', async (ctx) => {
 /**
  * Assign team in Chatwoot and send confirmation to user.
  */
-async function assignTeamAndConfirm(ctx: any, telegramUserId: number, teamId: number, teamLabel: string) {
-  const conversationId = await chatwootService.findConversationByTelegramUserId(telegramUserId);
+async function assignTeamAndConfirm(ctx: any, lookupId: number, teamId: number, teamLabel: string) {
+  const conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
 
   if (!conversationId) {
-    logger.warn({ telegramUserId }, 'No Chatwoot conversation found for team assignment');
+    logger.warn({ lookupId }, 'No Chatwoot conversation found for team assignment');
   }
 
   // 1. Send confirmation to Telegram FIRST
