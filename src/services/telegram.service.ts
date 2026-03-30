@@ -231,8 +231,8 @@ export async function setupTelegramWebhook(webhookUrl: string) {
 
   await bot.api.setMyCommands(GUEST_COMMANDS, { scope: { type: 'default' } });
   await bot.api.setMyCommands(GUEST_COMMANDS, { scope: { type: 'all_private_chats' } });
-  await bot.api.setMyCommands(BOT_COMMANDS, { scope: { type: 'all_group_chats' } });
-  logger.info('Default bot commands set to guest menu (registro only), full menu for groups');
+  await bot.api.setMyCommands(GUEST_COMMANDS, { scope: { type: 'all_group_chats' } });
+  logger.info('Default bot commands set to guest menu (registro only) for all scopes');
 
   await bot.api.setWebhook(webhookUrl, {
     secret_token: config.TELEGRAM_WEBHOOK_SECRET,
@@ -250,26 +250,18 @@ export async function setupTelegramWebhook(webhookUrl: string) {
 
 // ─── Per-user command scopes ─────────────────────────────────────────────────
 
-export async function enableUserCommands(telegramUserId: number) {
-  if (telegramUserId < 0) {
-    logger.debug({ telegramUserId }, 'Skipping enableUserCommands for group chat');
-    return;
-  }
+export async function enableUserCommands(telegramChatId: number) {
   await bot.api.setMyCommands(BOT_COMMANDS, {
-    scope: { type: 'chat', chat_id: telegramUserId },
+    scope: { type: 'chat', chat_id: telegramChatId },
   });
-  logger.info({ telegramUserId }, 'Department commands enabled for user');
+  logger.info({ telegramChatId }, 'Department commands enabled for chat');
 }
 
-export async function resetUserCommands(telegramUserId: number) {
-  if (telegramUserId < 0) {
-    logger.debug({ telegramUserId }, 'Skipping resetUserCommands for group chat');
-    return;
-  }
+export async function resetUserCommands(telegramChatId: number) {
   await bot.api.setMyCommands(GUEST_COMMANDS, {
-    scope: { type: 'chat', chat_id: telegramUserId },
+    scope: { type: 'chat', chat_id: telegramChatId },
   });
-  logger.info({ telegramUserId }, 'Commands reset to guest menu for user');
+  logger.info({ telegramChatId }, 'Commands reset to guest menu for chat');
 }
 
 // ─── Utility ─────────────────────────────────────────────────────────────────
