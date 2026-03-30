@@ -16,6 +16,24 @@ import {
 export const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 
 /**
+ * Group migration map: oldGroupId → newSupergroupId.
+ * When Telegram migrates a group to supergroup, the old ID stops working for API calls
+ * but Telegram may still send webhook updates with the old ID.
+ * We detect migrations via the `migrate_to_chat_id` field in Telegram updates
+ * and rewrite the chat.id to the new supergroup ID before forwarding to Chatwoot.
+ */
+const groupMigrations = new Map<number, number>();
+
+export function registerGroupMigration(oldId: number, newId: number): void {
+  groupMigrations.set(oldId, newId);
+  logger.info({ oldId, newId }, 'Group migration registered');
+}
+
+export function getMigratedGroupId(chatId: number): number {
+  return groupMigrations.get(chatId) ?? chatId;
+}
+
+/**
  * Return the ID to use for Chatwoot conversation lookup.
  * In private chats: from.id (the user).
  * In groups/supergroups: chat.id (the group) — because the transformation
@@ -27,11 +45,12 @@ function chatwootLookupId(ctx: any): number {
   const chat = ctx.chat ?? ctx.callbackQuery?.message?.chat;
   // Negative chat ID = group/supergroup
   if (chat?.id && chat.id < 0) {
-    return chat.id;
+    // Use migrated ID if the group was upgraded to supergroup
+    return getMigratedGroupId(chat.id);
   }
   const chatType = chat?.type;
   if (chatType === 'group' || chatType === 'supergroup') {
-    return chat.id;
+    return getMigratedGroupId(chat.id);
   }
   return ctx.from.id;
 }
@@ -499,9 +518,16 @@ async function assignTeamAndConfirm(ctx: any, lookupId: number, teamId: number, 
   return { action: 'team_assigned', teamId, teamLabel, conversationId };
 }
 
-// Handle errors
+// Handle errors — detect group migration errors
 bot.catch((err) => {
-  logger.error({ error: err.message }, 'Grammy bot error');
+  const errMsg = (err as any)?.error?.message ?? err?.message ?? '';
+  // Telegram returns migrate_to_chat_id in the error response when a group is upgraded
+  const migrateId = (err?.error as any)?.parameters?.migrate_to_chat_id;
+  if (migrateId && err?.ctx?.chat?.id) {
+    registerGroupMigration(err.ctx.chat.id, migrateId);
+    logger.info({ oldId: err.ctx.chat.id, newId: migrateId }, 'Group migration detected from API error');
+  }
+  logger.error({ error: errMsg }, 'Grammy bot error');
 });
 
 export async function setupTelegramWebhook(webhookUrl: string) {

@@ -1,7 +1,7 @@
 import { FastifyPluginAsync } from 'fastify';
 import { webhookCallback } from 'grammy';
 import axios from 'axios';
-import { bot, setupTelegramWebhook } from '../services/telegram.service.js';
+import { bot, setupTelegramWebhook, registerGroupMigration, getMigratedGroupId } from '../services/telegram.service.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 
@@ -23,6 +23,7 @@ export function wasRecentGroupSender(userId: number): boolean {
   return true;
 }
 
+
 export const telegramPlugin: FastifyPluginAsync = async (fastify) => {
   // Register webhook route with secret path
   const webhookPath = `/telegram/${config.TELEGRAM_WEBHOOK_SECRET}`;
@@ -42,6 +43,15 @@ export const telegramPlugin: FastifyPluginAsync = async (fastify) => {
       hasMessage: !!update?.message,
       hasEditedMessage: !!update?.edited_message,
     }, 'Telegram webhook received');
+
+    // Detect group→supergroup migration events
+    const migrateToId = msg?.migrate_to_chat_id;
+    if (migrateToId && msg?.chat?.id) {
+      registerGroupMigration(msg.chat.id, migrateToId);
+      logger.info({ oldId: msg.chat.id, newId: migrateToId }, 'Telegram group migration detected');
+      // Don't forward migration system messages to Chatwoot
+      return reply.send({ ok: true });
+    }
 
     // 1. Forward to Chatwoot first (fire-and-forget so it creates the conversation)
     forwardToChatwoot(request.body, chatwootTelegramWebhook);
@@ -78,6 +88,14 @@ function transformMessage(msg: any): void {
 
   const senderName = msg.from?.first_name ?? msg.from?.username ?? 'Unknown';
   const groupTitle = msg.chat.title ?? 'Sin nombre';
+
+  // If this group was migrated to a supergroup, use the new ID
+  // so messages route to the correct Chatwoot conversation.
+  const migratedId = getMigratedGroupId(msg.chat.id);
+  if (migratedId !== msg.chat.id) {
+    logger.debug({ oldId: msg.chat.id, newId: migratedId }, 'Rewriting migrated group ID');
+    msg.chat.id = migratedId;
+  }
 
   // Convert chat to private type
   msg.chat.type = 'private';
