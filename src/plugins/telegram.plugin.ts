@@ -53,10 +53,17 @@ export const telegramPlugin: FastifyPluginAsync = async (fastify) => {
       return reply.send({ ok: true });
     }
 
-    // 1. Forward to Chatwoot first (fire-and-forget so it creates the conversation)
-    forwardToChatwoot(request.body, chatwootTelegramWebhook);
+    // 1. Forward to Chatwoot and WAIT for confirmation.
+    //    If Chatwoot fails, return error so Telegram retries the update.
+    try {
+      await forwardToChatwoot(request.body, chatwootTelegramWebhook);
+    } catch (err: any) {
+      logger.error({ err: err.message }, 'Chatwoot rejected update — returning 500 so Telegram retries');
+      reply.code(500);
+      return { ok: false, error: 'Chatwoot forward failed' };
+    }
 
-    // 2. Process with grammY (our bot logic)
+    // 2. Process with grammY (our bot logic) — only after Chatwoot confirmed
     const handler = webhookCallback(bot, 'fastify', {
       secretToken: config.TELEGRAM_WEBHOOK_SECRET,
     });
@@ -173,11 +180,12 @@ function callbackToMessage(update: any): any {
 }
 
 /**
- * Forward Telegram webhook payload to Chatwoot (fire-and-forget).
+ * Forward Telegram webhook payload to Chatwoot.
+ * Throws on failure so the webhook can return 500 and Telegram retries.
  * For callback_query: converts to a synthetic message so Chatwoot can process it.
  * Group messages/callbacks get transformed (from.id = chat.id, type = private).
  */
-function forwardToChatwoot(body: unknown, chatwootUrl: string) {
+async function forwardToChatwoot(body: unknown, chatwootUrl: string): Promise<void> {
   const update = body as any;
 
   let payload: unknown;
@@ -194,12 +202,9 @@ function forwardToChatwoot(body: unknown, chatwootUrl: string) {
     payload = transformGroupMessage(body);
   }
 
-  axios.post(chatwootUrl, payload, {
+  await axios.post(chatwootUrl, payload, {
     headers: { 'Content-Type': 'application/json' },
-    timeout: 5000,
-  }).then(() => {
-    logger.debug('Forwarded Telegram update to Chatwoot');
-  }).catch((err) => {
-    logger.error({ err: err.message, url: chatwootUrl }, 'Failed to forward to Chatwoot');
+    timeout: 10000,
   });
+  logger.debug('Forwarded Telegram update to Chatwoot');
 }
