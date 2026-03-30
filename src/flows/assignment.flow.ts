@@ -1,6 +1,6 @@
 import { chatwootService } from '../services/chatwoot.service.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
-import { bot, wasBotAssignment } from '../services/telegram.service.js';
+import { bot, wasBotAssignment, markBotAssignment } from '../services/telegram.service.js';
 import { TEAM_LABELS, TEAM_NAMES } from '../services/department-menu.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { logger } from '../utils/logger.js';
@@ -31,7 +31,7 @@ export async function handleConversationUpdated(payload: ChatwootWebhookPayload)
     const previousAssigneeId = assigneeChange.assignee_id.previous_value as number | null;
     const currentAssigneeId = assigneeChange.assignee_id.current_value as number | null;
 
-    if (previousAssigneeId !== currentAssigneeId && currentAssigneeId) {
+    if (previousAssigneeId !== currentAssigneeId && currentAssigneeId && !wasBotAssignment(conversation.id)) {
       await handleAssigneeChange(conversation, telegramUserId, currentAssigneeId, payload);
     }
   }

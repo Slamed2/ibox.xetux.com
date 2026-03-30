@@ -94,7 +94,8 @@ export function wasBotAssignment(conversationId: number): boolean {
     recentBotAssignments.delete(conversationId);
     return false;
   }
-  recentBotAssignments.delete(conversationId);
+  // Don't consume — multiple webhooks may fire for a single assignment
+  // (team change + assignee change + labels). The 10s TTL handles cleanup.
   return true;
 }
 
