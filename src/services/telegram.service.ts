@@ -8,6 +8,7 @@ import { db } from '../db/connection.js';
 import { botConfig } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import {
+  TEAMS,
   COUNTRY_COMMANDS,
   COUNTRY_KEYBOARD,
   COUNTRY_BUTTONS,
@@ -254,6 +255,21 @@ bot.command('registro', async (ctx) => {
       }
       const conversation = conversationId ? await chatwootService.getConversation(conversationId) : null;
       const contactId = conversation?.meta?.sender?.id ?? '';
+      const xetuxId = conversation?.meta?.sender?.custom_attributes?.xetux_id as string | undefined;
+
+      // If already registered, show department menu instead of login button
+      if (xetuxId) {
+        const country = xetuxId.toUpperCase().startsWith('MX') ? 'mx' : 've';
+        const keyboard = new InlineKeyboard()
+          .text('💼 Consultoría', `team:${country === 'mx' ? TEAMS.CONSULTORIA_MX : TEAMS.CONSULTORIA_VE}:Consultoría`)
+          .text('🛠 Soporte', `team:${country === 'mx' ? TEAMS.SOPORTE_MX : TEAMS.SOPORTE_VE}:Soporte`)
+          .row()
+          .text('🛒 Ventas', `team:${country === 'mx' ? TEAMS.VENTAS_MX : TEAMS.VENTAS_VE}:Ventas`)
+          .text('📋 Administración', `team:${country === 'mx' ? TEAMS.ADMINISTRACION_MX : TEAMS.ADMINISTRACION_VE}:Administración`);
+
+        await ctx.reply('Ya estás registrado. ¿Con qué departamento deseas comunicarte?', { reply_markup: keyboard });
+        return { action: 'registro_already_registered', conversationId, contactId, xetuxId };
+      }
 
       const webappUrl = `${WEBAPP_BASE_URL}?contact_id=${contactId}&conversation_id=${conversationId ?? ''}`;
 
