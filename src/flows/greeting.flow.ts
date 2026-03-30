@@ -9,6 +9,13 @@ import { InlineKeyboard } from 'grammy';
 
 const WEBAPP_BASE_URL = (process.env.WEBHOOK_BASE_URL ?? 'https://xetux2-inbox.zbawxh.easypanel.host') + '/webapp';
 
+/**
+ * Track recently greeted conversations so the routing flow skips duplicate
+ * command handling (e.g. /registro arriving as the first message).
+ * Entries auto-expire after 10 seconds.
+ */
+export const recentlyGreetedConversations = new Map<number, number>();
+
 /** WebApp buttons don't work in groups — use URL button that opens standalone page. */
 function loginButton(label: string, url: string, chatId: number): InlineKeyboard {
   if (chatId < 0) {
@@ -151,6 +158,9 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
           source_id: String(telegramMessageId),
         });
       }
+
+      // Mark as recently greeted so routing flow skips duplicate command handling
+      recentlyGreetedConversations.set(conversation.id, Date.now());
 
       return {
         greeting: !effectiveXetuxId ? 'welcome_no_xetux_id' : deepLinkXetuxId ? 'welcome_deep_link' : 'welcome_with_xetux_id',

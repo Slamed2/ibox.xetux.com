@@ -94,3 +94,16 @@ export const BOT_COMMANDS = [
 // Text representation for Chatwoot sync
 export const MENU_TEXT =
   '💼 /consultoria | 🛠 /soporte | 🛒 /ventas | 📋 /administracion';
+
+/**
+ * Resolve a department command + xetux_id to a specific team.
+ * Returns null if xetux_id is missing or command is unknown.
+ */
+export function resolveTeamFromCommand(
+  command: string,
+  xetuxId: string | undefined,
+): { teamId: number; label: string } | null {
+  if (!xetuxId || !COUNTRY_COMMANDS[command]) return null;
+  const countryKey = xetuxId.toUpperCase().startsWith('MX') ? '🇲🇽 México' : '🇻🇪 Venezuela';
+  return COUNTRY_COMMANDS[command][countryKey] ?? null;
+}

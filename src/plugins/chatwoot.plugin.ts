@@ -17,9 +17,32 @@ import { logger } from '../utils/logger.js';
 function normalizePayload(raw: Record<string, unknown>): ChatwootWebhookPayload {
   const event = raw.event as string;
 
-  // If payload already has .conversation, use as-is
+  // When raw.conversation exists, message data lives at root level (not under .message).
+  // Build the .message object and ensure .conversation.contact is populated.
   if (raw.conversation) {
-    return raw as unknown as ChatwootWebhookPayload;
+    const payload = raw as any;
+
+    // message_created / message_updated: message fields are at root
+    if ((event === 'message_created' || event === 'message_updated') && !payload.message) {
+      payload.message = {
+        id: raw.id,
+        content: raw.content,
+        message_type: raw.message_type,
+        content_type: raw.content_type,
+        sender: raw.sender,
+        source_id: raw.source_id,
+        created_at: raw.created_at,
+        conversation_id: (raw.conversation as any)?.id,
+      };
+    }
+
+    // Ensure conversation.contact is populated from meta.sender
+    const conv = payload.conversation;
+    if (!conv.contact && conv.meta?.sender) {
+      conv.contact = conv.meta.sender;
+    }
+
+    return payload as ChatwootWebhookPayload;
   }
 
   // Normal webhook: conversation data is at root level

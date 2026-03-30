@@ -3,20 +3,10 @@ import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { chatwootService } from './chatwoot.service.js';
 import { withExecutionLog } from './execution-log.service.js';
-import { InlineKeyboard } from 'grammy';
 import { db } from '../db/connection.js';
 import { botConfig } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
-import {
-  TEAMS,
-  COUNTRY_COMMANDS,
-  COUNTRY_KEYBOARD,
-  COUNTRY_BUTTONS,
-  BOT_COMMANDS,
-  GUEST_COMMANDS,
-  TEAM_LABELS,
-  ALL_DEPARTMENT_LABELS,
-} from './department-menu.js';
+import { BOT_COMMANDS, GUEST_COMMANDS } from './department-menu.js';
 
 export const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 
@@ -40,16 +30,11 @@ bot.api.config.use((prev, method, payload, signal) => {
   return prev(method, payload, signal);
 });
 
-/**
- * Group migration map: oldGroupId → newSupergroupId.
- * Persisted to the database (botConfig table) so it survives restarts.
- * When Telegram migrates a group to supergroup, the old ID stops working for API calls
- * but Telegram may still send webhook updates with the old ID.
- */
+// ─── Group migration infrastructure ─────────────────────────────────────────
+
 const groupMigrations = new Map<number, number>();
 const DB_KEY = 'group_migrations';
 
-/** Load migrations from DB into memory on startup. */
 export async function loadGroupMigrations(): Promise<void> {
   try {
     const row = await db.select().from(botConfig).where(eq(botConfig.key, DB_KEY)).limit(1);
@@ -67,7 +52,6 @@ export async function loadGroupMigrations(): Promise<void> {
   }
 }
 
-/** Save current in-memory migrations to DB. */
 async function saveGroupMigrations(): Promise<void> {
   try {
     const map: Record<string, number> = {};
@@ -88,7 +72,6 @@ async function saveGroupMigrations(): Promise<void> {
 export function registerGroupMigration(oldId: number, newId: number): void {
   groupMigrations.set(oldId, newId);
   logger.info({ oldId, newId }, 'Group migration registered');
-  // Persist async (fire-and-forget)
   saveGroupMigrations();
 }
 
@@ -96,83 +79,12 @@ export function getMigratedGroupId(chatId: number): number {
   return groupMigrations.get(chatId) ?? chatId;
 }
 
-/**
- * Return the ID to use for Chatwoot conversation lookup.
- * In private chats: from.id (the user).
- * In groups/supergroups: chat.id (the group) — because the transformation
- * sets from.id = chat.id so Chatwoot indexes by group ID.
- * For callbacks: checks callbackQuery.message.chat.
- * Negative chat IDs always indicate a group.
- */
-function chatwootLookupId(ctx: any): number {
-  const chat = ctx.chat ?? ctx.callbackQuery?.message?.chat;
-  // Negative chat ID = group/supergroup
-  if (chat?.id && chat.id < 0) {
-    // Use migrated ID if the group was upgraded to supergroup
-    return getMigratedGroupId(chat.id);
-  }
-  const chatType = chat?.type;
-  if (chatType === 'group' || chatType === 'supergroup') {
-    return getMigratedGroupId(chat.id);
-  }
-  return ctx.from.id;
-}
+// ─── Bot assignment tracking ─────────────────────────────────────────────────
 
-/**
- * Check if the current context is a group/supergroup chat.
- */
-function isGroupChat(ctx: any): boolean {
-  const chat = ctx.chat ?? ctx.callbackQuery?.message?.chat;
-  if (chat?.id && chat.id < 0) return true;
-  const chatType = chat?.type;
-  return chatType === 'group' || chatType === 'supergroup';
-}
-
-/**
- * Log user action to Chatwoot as an incoming message (so agents see what the user did).
- * Used for group commands and callback button presses that don't get forwarded raw.
- */
-async function logUserActionToChatwoot(
-  lookupId: number,
-  text: string,
-  senderName: string,
-  telegramMessageId?: number,
-) {
-  try {
-    const conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
-    if (!conversationId) return;
-    const content = isNaN(lookupId) || lookupId > 0 ? text : `${senderName}: ${text}`;
-    await chatwootService.sendMessage(conversationId, {
-      content,
-      message_type: 'incoming',
-      ...(telegramMessageId ? { source_id: String(telegramMessageId) } : {}),
-    });
-  } catch (err) {
-    logger.debug({ err, lookupId, text }, 'Failed to log user action to Chatwoot');
-  }
-}
-
-// Track pending department selection per user (waiting for country)
-const pendingDepartment = new Map<number, string>();
-
-// Track recent bot-initiated team assignments to avoid duplicate notifications
-// Key: conversationId, Value: timestamp — expires after 10 seconds
 const recentBotAssignments = new Map<number, number>();
 
-// Pending deep link xetux IDs — stored when /start arrives before conversation exists
-const pendingDeepLinkXetuxIds = new Map<number, { xetuxId: string; timestamp: number }>();
-
-export function setPendingDeepLinkXetuxId(telegramUserId: number, xetuxId: string): void {
-  pendingDeepLinkXetuxIds.set(telegramUserId, { xetuxId, timestamp: Date.now() });
-}
-
-export function consumePendingDeepLinkXetuxId(telegramUserId: number): string | null {
-  const entry = pendingDeepLinkXetuxIds.get(telegramUserId);
-  if (!entry) return null;
-  pendingDeepLinkXetuxIds.delete(telegramUserId);
-  // Expire after 30 seconds
-  if (Date.now() - entry.timestamp > 30_000) return null;
-  return entry.xetuxId;
+export function markBotAssignment(conversationId: number): void {
+  recentBotAssignments.set(conversationId, Date.now());
 }
 
 export function wasBotAssignment(conversationId: number): boolean {
@@ -186,11 +98,28 @@ export function wasBotAssignment(conversationId: number): boolean {
   return true;
 }
 
-// /start command — greeting is handled by Chatwoot conversation_created flow
+// ─── Deep link pending storage ───────────────────────────────────────────────
+
+const pendingDeepLinkXetuxIds = new Map<number, { xetuxId: string; timestamp: number }>();
+
+export function setPendingDeepLinkXetuxId(telegramUserId: number, xetuxId: string): void {
+  pendingDeepLinkXetuxIds.set(telegramUserId, { xetuxId, timestamp: Date.now() });
+}
+
+export function consumePendingDeepLinkXetuxId(telegramUserId: number): string | null {
+  const entry = pendingDeepLinkXetuxIds.get(telegramUserId);
+  if (!entry) return null;
+  pendingDeepLinkXetuxIds.delete(telegramUserId);
+  if (Date.now() - entry.timestamp > 30_000) return null;
+  return entry.xetuxId;
+}
+
+// ─── Thin grammY handlers ────────────────────────────────────────────────────
+
+// /start — only handles deep link parsing, greeting is deferred to Chatwoot flow
 bot.command('start', async (ctx) => {
   const text = ctx.message?.text ?? '';
   const userId = ctx.from?.id;
-  const lookupId = chatwootLookupId(ctx);
 
   await withExecutionLog(
     {
@@ -202,329 +131,41 @@ bot.command('start', async (ctx) => {
       metadata: { chatType: ctx.chat.type, username: ctx.from?.username ?? null },
     },
     async () => {
-      // Check for deep link: /start XETUXID-VE00029 or XETUXID_MX00023
-      // Format: 2 letters (MX/VE) + 5 digits
+      // Deep link: /start XETUXID-VE00029 or XETUXID_MX00023
       const match = text.match(/XETUXID[-_]+([A-Za-z]{2}\d{5})/);
       if (match && userId) {
         const xetuxId = match[1].toUpperCase();
-        const isMX = xetuxId.startsWith('MX');
-        const country = isMX ? 'Mexico' : 'Venezuela';
-        const countryCode = isMX ? 'MX' : 'VE';
-
-        // Always store pending — Chatwoot may create a NEW conversation
-        // that the greeting flow will handle
         setPendingDeepLinkXetuxId(userId, xetuxId);
-
-        // Try to update existing contact if found
-        const conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
-        const conversation = conversationId ? await chatwootService.getConversation(conversationId) : null;
-        const contactId = conversation?.meta?.sender?.id;
-
-        if (contactId) {
-          await chatwootService.updateContact(contactId, {
-            additional_attributes: { country, country_code: countryCode },
-            custom_attributes: { xetux_id: xetuxId },
-          });
-          await enableUserCommands(userId);
-
-          // Add country label and internal note
-          if (conversationId) {
-            await chatwootService.addLabels(conversationId, [isMX ? 'mexico' : 'venezuela']);
-            await chatwootService.sendMessage(conversationId, {
-              content: `🔗 Xetux ID vinculado via deep link: ${xetuxId}`,
-              private: true,
-              message_type: 'outgoing',
-            });
-          }
-
-          logger.info({ userId, xetuxId, contactId, conversationId }, 'Xetux ID updated via deep link');
-          return { action: 'xetux_id_linked', xetuxId, contactId, conversationId };
-        }
-
         logger.info({ userId, xetuxId }, 'Deep link xetux_id stored, waiting for conversation_created');
         return { action: 'deep_link_pending', xetuxId };
       }
-
       return { handled: 'deferred_to_chatwoot_conversation_created' };
     },
   );
 });
 
-// /registro command — send login button
-const WEBAPP_BASE_URL = (process.env.WEBHOOK_BASE_URL ?? 'https://xetux2-inbox.zbawxh.easypanel.host') + '/webapp';
-
-bot.command('registro', async (ctx) => {
-  const userId = ctx.from?.id;
-  const lookupId = chatwootLookupId(ctx);
-  await withExecutionLog(
-    {
-      eventType: 'telegram:command_registro',
-      source: 'telegram_webhook',
-      direction: 'inbound',
-      inputData: { chatId: ctx.chat.id, from: ctx.from },
-      contactId: String(userId),
-      metadata: { username: ctx.from?.username ?? null, chatType: ctx.chat.type },
-    },
-    async () => {
-      // Find conversation and contact in Chatwoot
-      // For groups: the forward to Chatwoot is fire-and-forget, conversation may not exist yet
-      let conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
-      if (!conversationId && isGroupChat(ctx)) {
-        await new Promise(r => setTimeout(r, 2500));
-        conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
-      }
-      const conversation = conversationId ? await chatwootService.getConversation(conversationId) : null;
-      const contactId = conversation?.meta?.sender?.id ?? '';
-      const xetuxId = conversation?.meta?.sender?.custom_attributes?.xetux_id as string | undefined;
-
-      // If already registered, show department menu instead of login button
-      if (xetuxId) {
-        const country = xetuxId.toUpperCase().startsWith('MX') ? 'mx' : 've';
-        const keyboard = new InlineKeyboard()
-          .text('💼 Consultoría', `team:${country === 'mx' ? TEAMS.CONSULTORIA_MX : TEAMS.CONSULTORIA_VE}:Consultoría`)
-          .text('🛠 Soporte', `team:${country === 'mx' ? TEAMS.SOPORTE_MX : TEAMS.SOPORTE_VE}:Soporte`)
-          .row()
-          .text('🛒 Ventas', `team:${country === 'mx' ? TEAMS.VENTAS_MX : TEAMS.VENTAS_VE}:Ventas`)
-          .text('📋 Administración', `team:${country === 'mx' ? TEAMS.ADMINISTRACION_MX : TEAMS.ADMINISTRACION_VE}:Administración`);
-
-        await ctx.reply('Ya estás registrado. ¿Con qué departamento deseas comunicarte?', { reply_markup: keyboard });
-        return { action: 'registro_already_registered', conversationId, contactId, xetuxId };
-      }
-
-      const webappUrl = `${WEBAPP_BASE_URL}?contact_id=${contactId}&conversation_id=${conversationId ?? ''}`;
-
-      // WebApp buttons don't work in groups — open standalone login page instead
-      const keyboard = isGroupChat(ctx)
-        ? new InlineKeyboard().url('🔑 Iniciar sesión', webappUrl.replace('/webapp?', '/webapp/login?'))
-        : new InlineKeyboard().webApp('🔑 Iniciar sesión', webappUrl);
-
-      // Check if this is a new conversation (no messages yet or just the /start)
-      const isNewConversation = conversation && !conversation.team_id && conversation.messages_count <= 2;
-
-      if (isNewConversation) {
-        // New conversation: include greeting + login button
-        const greeting = '¡Bienvenido a Xetux! 🚀\n\nPara comenzar, inicia sesión tocando el botón de abajo.\nLuego usa el menú para seleccionar el departamento con el que deseas comunicarte.';
-        const sentMsg = await ctx.reply(greeting, { reply_markup: keyboard });
-
-        // Sync to Chatwoot
-        if (conversationId) {
-          await chatwootService.sendMessage(conversationId, {
-            content: greeting + `\n\n🔗 [Iniciar sesión](${webappUrl})`,
-            message_type: 'outgoing',
-            source_id: String(sentMsg.message_id),
-          });
-        }
-
-        return { action: 'registro_with_greeting', conversationId, contactId };
-      }
-
-      // Existing conversation: just the login button
-      await ctx.reply('Toca el botón para iniciar sesión:', { reply_markup: keyboard });
-      return { action: 'registro_button_sent', conversationId, contactId };
-    },
-  );
-});
-
-// /consultoria command
-bot.command('consultoria', async (ctx) => {
-  await handleDepartmentCommand(ctx, 'consultoria', '💼 Consultoría');
-});
-
-// /soporte command
-bot.command('soporte', async (ctx) => {
-  await handleDepartmentCommand(ctx, 'soporte', '🛠 Soporte');
-});
-
-// /ventas command
-bot.command('ventas', async (ctx) => {
-  await handleDepartmentCommand(ctx, 'ventas', '🛒 Ventas');
-});
-
-// /administracion command
-bot.command('administracion', async (ctx) => {
-  await handleDepartmentCommand(ctx, 'administracion', '📋 Administración');
-});
-
-async function handleDepartmentCommand(ctx: any, command: string, displayName: string) {
-  const userId = ctx.from.id;
-  const lookupId = chatwootLookupId(ctx);
-
-  await withExecutionLog(
-    {
-      eventType: 'telegram:dept_command',
-      source: 'telegram_webhook',
-      direction: 'inbound',
-      inputData: { userId, command },
-      contactId: String(userId),
-      metadata: { command, username: ctx.from?.username ?? null, chatType: ctx.chat?.type },
-    },
-    async () => {
-      if (!COUNTRY_COMMANDS[command]) {
-        return { action: 'unknown_command', command };
-      }
-
-      // Try to auto-resolve country from xetux_id
-      // For groups: retry after delay if conversation not found yet (async forward)
-      let conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
-      if (!conversationId && isGroupChat(ctx)) {
-        await new Promise(r => setTimeout(r, 2500));
-        conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
-      }
-      const conversation = conversationId ? await chatwootService.getConversation(conversationId) : null;
-      const xetuxId = conversation?.meta?.sender?.custom_attributes?.xetux_id as string | undefined;
-
-      if (xetuxId) {
-        const countryKey = xetuxId.toUpperCase().startsWith('MX') ? '🇲🇽 México' : '🇻🇪 Venezuela';
-        const match = COUNTRY_COMMANDS[command][countryKey];
-        if (match) {
-          return await assignTeamAndConfirm(ctx, lookupId, match.teamId, match.label);
-        }
-      }
-
-      // No xetux_id — show login button
-      const contactId = conversation?.meta?.sender?.id ?? '';
-      const webappUrl = `${WEBAPP_BASE_URL}?contact_id=${contactId}&conversation_id=${conversationId ?? ''}`;
-      // WebApp buttons don't work in groups — open standalone login page instead
-      const keyboard = isGroupChat(ctx)
-        ? new InlineKeyboard().url('🔑 Iniciar sesión', webappUrl.replace('/webapp?', '/webapp/login?'))
-        : new InlineKeyboard().webApp('🔑 Iniciar sesión', webappUrl);
-      await ctx.reply('Para usar los departamentos primero debes iniciar sesión.', { reply_markup: keyboard });
-      return { action: 'login_required', department: command };
-    },
-  );
-}
-
-// Handle text messages — check for country selection or regular message
-bot.on('message:text', async (ctx) => {
-  const text = ctx.message.text;
-  const userId = ctx.from.id;
-
-  // Check if it's a country button response
-  const lookupId = chatwootLookupId(ctx);
-  if (COUNTRY_BUTTONS.has(text) && pendingDepartment.has(userId)) {
-    await withExecutionLog(
-      {
-        eventType: 'telegram:country_selection',
-        source: 'telegram_webhook',
-        direction: 'inbound',
-        inputData: { userId, text, pendingDept: pendingDepartment.get(userId) },
-        contactId: String(userId),
-        metadata: { country: text, department: pendingDepartment.get(userId) },
-      },
-      async () => {
-        const dept = pendingDepartment.get(userId)!;
-        pendingDepartment.delete(userId);
-
-        const countryMap = COUNTRY_COMMANDS[dept];
-        if (countryMap?.[text]) {
-          const { teamId, label } = countryMap[text];
-          return await assignTeamAndConfirm(ctx, lookupId, teamId, label);
-        }
-
-        return { action: 'unknown_country', text, dept };
-      },
-    );
-    return;
-  }
-
-  // Regular message — just log it
-  await withExecutionLog(
-    {
-      eventType: 'telegram:message',
-      source: 'telegram_webhook',
-      direction: 'inbound',
-      inputData: { chatId: ctx.chat.id, from: ctx.from, messageId: ctx.message.message_id, text },
-      contactId: String(userId),
-      metadata: { chatType: ctx.chat.type, username: ctx.from?.username ?? null },
-    },
-    async () => {
-      return { messageId: ctx.message.message_id, text };
-    },
-  );
-});
-
-// Handle inline button callbacks (department selection after registration)
+// Callback queries — only ACK + remove buttons. Business logic in routing.flow.ts
 bot.on('callback_query:data', async (ctx) => {
-  const data = ctx.callbackQuery.data;
-  const userId = ctx.from.id;
-  const lookupId = chatwootLookupId(ctx);
-
-  logger.info({
-    userId,
-    lookupId,
-    ctxChatId: ctx.chat?.id,
-    ctxChatType: ctx.chat?.type,
-    cbMsgChatId: ctx.callbackQuery?.message?.chat?.id,
-    cbMsgChatType: ctx.callbackQuery?.message?.chat?.type,
-    data,
-  }, 'Callback query context debug');
-
-  if (data.startsWith('team:')) {
-    const parts = data.split(':');
-    const teamId = parseInt(parts[1], 10);
-    const teamLabel = parts[2] ?? '';
-
-    // ACK immediately so Telegram doesn't retry the callback
-    await ctx.answerCallbackQuery();
-
-    await withExecutionLog(
-      {
-        eventType: 'telegram:dept_callback',
-        source: 'telegram_webhook',
-        direction: 'inbound',
-        inputData: { userId, data },
-        contactId: String(userId),
-        metadata: { teamId, teamLabel, username: ctx.from?.username ?? null, chatType: ctx.chat?.type },
-      },
-      async () => {
-
-        // Button press is forwarded to Chatwoot as synthetic message (via telegram.plugin.ts)
-        // so we don't need to manually log it here.
-
-        const conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
-
-        if (conversationId) {
-          recentBotAssignments.set(conversationId, Date.now());
-          await chatwootService.assignConversation(conversationId, { team_id: teamId });
-          const teamLabelTag = TEAM_LABELS[teamId];
-          if (teamLabelTag) {
-            // Remove previous department labels before adding the new one
-            const oldLabels = ALL_DEPARTMENT_LABELS.filter(l => l !== teamLabelTag);
-            await chatwootService.removeLabels(conversationId, oldLabels);
-            await chatwootService.addLabels(conversationId, [teamLabelTag]);
-          }
-        }
-
-        // Remove inline buttons from the original message (keep the text)
-        await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
-
-        // Send confirmation as a separate message
-        const confirmText = `✅ Conversación #${conversationId ?? ''} asignada a *${teamLabel}*.\n\nUn agente te atenderá pronto.\n\nSi deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.`;
-        const sentMsg = await ctx.reply(confirmText, { parse_mode: 'Markdown' });
-
-        // Sync confirmation to Chatwoot
-        if (conversationId) {
-          await chatwootService.sendMessage(conversationId, {
-            content: `✅ Conversación #${conversationId} asignada a ${teamLabel}.\n\nUn agente te atenderá pronto.\n\nSi deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.`,
-            message_type: 'outgoing',
-            source_id: String(sentMsg.message_id),
-          });
-        }
-
-        return { action: 'team_assigned_callback', teamId, teamLabel, conversationId };
-      },
-    );
-    return;
-  }
-
   await ctx.answerCallbackQuery();
+  if (ctx.callbackQuery.data.startsWith('team:')) {
+    try {
+      await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
+    } catch {
+      // Message may have been deleted or already edited
+    }
+  }
 });
 
-// Handle edited messages — sync edits to Chatwoot
+// Edited messages — sync edits to Chatwoot (needs lookup, but edits are rare)
 bot.on('edited_message:text', async (ctx) => {
   const userId = ctx.from?.id;
-  const lookupId = chatwootLookupId(ctx);
   const editedMsg = ctx.editedMessage;
+
+  // Determine lookup ID for Chatwoot
+  const chat = ctx.chat;
+  const lookupId = (chat?.id && chat.id < 0)
+    ? getMigratedGroupId(chat.id)
+    : (ctx.from?.id ?? 0);
 
   await withExecutionLog(
     {
@@ -550,7 +191,7 @@ bot.on('edited_message:text', async (ctx) => {
   );
 });
 
-// Handle non-text messages
+// Non-text messages — log only
 bot.on('message', async (ctx) => {
   await withExecutionLog(
     {
@@ -567,47 +208,9 @@ bot.on('message', async (ctx) => {
   );
 });
 
-/**
- * Assign team in Chatwoot and send confirmation to user.
- */
-async function assignTeamAndConfirm(ctx: any, lookupId: number, teamId: number, teamLabel: string) {
-  const conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
-
-  if (!conversationId) {
-    logger.warn({ lookupId }, 'No Chatwoot conversation found for team assignment');
-  }
-
-  // 1. Send confirmation to Telegram FIRST
-  const confirmText = `✅ Conversación #${conversationId ?? ''} asignada a *${teamLabel}*.\n\nUn agente te atenderá pronto.\n\nSi deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.`;
-  const sentMsg = await ctx.reply(confirmText, { parse_mode: 'Markdown' });
-
-  // 2. Sync confirmation to Chatwoot
-  if (conversationId) {
-    await chatwootService.sendMessage(conversationId, {
-      content: `✅ Conversación #${conversationId} asignada a ${teamLabel}.\n\nUn agente te atenderá pronto.\n\nSi deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.`,
-      message_type: 'outgoing',
-      source_id: String(sentMsg.message_id),
-    });
-
-    // 3. Assign team AFTER — so Chatwoot's auto-greeting arrives after our confirmation
-    recentBotAssignments.set(conversationId, Date.now());
-    await chatwootService.assignConversation(conversationId, { team_id: teamId });
-    const teamLabelTag = TEAM_LABELS[teamId];
-    if (teamLabelTag) {
-      // Remove previous department labels before adding the new one
-      const oldLabels = ALL_DEPARTMENT_LABELS.filter(l => l !== teamLabelTag);
-      await chatwootService.removeLabels(conversationId, oldLabels);
-      await chatwootService.addLabels(conversationId, [teamLabelTag]);
-    }
-  }
-
-  return { action: 'team_assigned', teamId, teamLabel, conversationId };
-}
-
-// Handle errors — detect group migration errors
+// Error handler — detect group migrations from API errors
 bot.catch((err) => {
   const errMsg = (err as any)?.error?.message ?? err?.message ?? '';
-  // Telegram returns migrate_to_chat_id in the error response when a group is upgraded
   const migrateId = (err?.error as any)?.parameters?.migrate_to_chat_id;
   if (migrateId && err?.ctx?.chat?.id) {
     registerGroupMigration(err.ctx.chat.id, migrateId);
@@ -616,16 +219,15 @@ bot.catch((err) => {
   logger.error({ error: errMsg }, 'Grammy bot error');
 });
 
+// ─── Webhook setup ───────────────────────────────────────────────────────────
+
 export async function setupTelegramWebhook(webhookUrl: string) {
-  // Load persisted group migrations from DB
   await loadGroupMigrations();
 
-  // Clear all previous commands at every scope
   await bot.api.deleteMyCommands({ scope: { type: 'default' } });
   await bot.api.deleteMyCommands({ scope: { type: 'all_private_chats' } });
   await bot.api.deleteMyCommands({ scope: { type: 'all_group_chats' } });
 
-  // Set default commands (for users who haven't registered yet)
   await bot.api.setMyCommands(GUEST_COMMANDS, { scope: { type: 'default' } });
   await bot.api.setMyCommands(GUEST_COMMANDS, { scope: { type: 'all_private_chats' } });
   await bot.api.setMyCommands(BOT_COMMANDS, { scope: { type: 'all_group_chats' } });
@@ -645,11 +247,8 @@ export async function setupTelegramWebhook(webhookUrl: string) {
   logger.info({ webhookUrl }, 'Telegram webhook configured');
 }
 
-/**
- * Enable department commands in the hamburger menu for a specific user.
- * Call this after registration.
- * Skips groups (negative IDs) — they use the global all_group_chats scope.
- */
+// ─── Per-user command scopes ─────────────────────────────────────────────────
+
 export async function enableUserCommands(telegramUserId: number) {
   if (telegramUserId < 0) {
     logger.debug({ telegramUserId }, 'Skipping enableUserCommands for group chat');
@@ -661,11 +260,6 @@ export async function enableUserCommands(telegramUserId: number) {
   logger.info({ telegramUserId }, 'Department commands enabled for user');
 }
 
-/**
- * Reset commands to guest menu (registro only) for a specific user.
- * Call this when a contact is deleted or xetux_id is removed.
- * Skips groups (negative IDs) — they use the global all_group_chats scope.
- */
 export async function resetUserCommands(telegramUserId: number) {
   if (telegramUserId < 0) {
     logger.debug({ telegramUserId }, 'Skipping resetUserCommands for group chat');
@@ -677,9 +271,8 @@ export async function resetUserCommands(telegramUserId: number) {
   logger.info({ telegramUserId }, 'Commands reset to guest menu for user');
 }
 
-/**
- * Send a message via grammY and sync to Chatwoot with the message_id.
- */
+// ─── Utility ─────────────────────────────────────────────────────────────────
+
 export async function sendTelegramMessage(chatId: number | string, text: string) {
   const result = await bot.api.sendMessage(chatId, text);
   chatwootService.sendMessageByTelegramUserId(

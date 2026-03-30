@@ -162,10 +162,8 @@ function callbackToMessage(update: any): any {
   const cb = update.callback_query;
   if (!cb?.message?.chat) return null;
 
+  // Keep raw callback data so the routing flow can parse teamId
   const data = cb.data ?? '';
-  // Extract human-readable label from callback data (e.g., "team:2:Soporte" → "Seleccionó: Soporte")
-  const parts = data.split(':');
-  const label = parts.length >= 3 ? `Seleccionó: ${parts.slice(2).join(':')}` : data;
 
   return {
     update_id: update.update_id,
@@ -174,7 +172,7 @@ function callbackToMessage(update: any): any {
       from: cb.from,
       chat: cb.message.chat,
       date: Math.floor(Date.now() / 1000),
-      text: label,
+      text: data,
     },
   };
 }
