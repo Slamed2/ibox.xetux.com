@@ -21,6 +21,26 @@ import {
 export const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
 
 /**
+ * grammY API transformer: rewrite chat_id in outgoing API calls
+ * when a group→supergroup migration is known.
+ * Without this, ctx.reply() uses the old group ID from the original update,
+ * which Telegram rejects with "group chat was upgraded to supergroup chat".
+ */
+bot.api.config.use((prev, method, payload, signal) => {
+  if (payload && typeof payload === 'object' && 'chat_id' in payload) {
+    const chatId = (payload as any).chat_id;
+    if (typeof chatId === 'number' && chatId < 0) {
+      const migrated = getMigratedGroupId(chatId);
+      if (migrated !== chatId) {
+        logger.debug({ method, oldChatId: chatId, newChatId: migrated }, 'API transformer: rewriting migrated chat_id');
+        (payload as any).chat_id = migrated;
+      }
+    }
+  }
+  return prev(method, payload, signal);
+});
+
+/**
  * Group migration map: oldGroupId → newSupergroupId.
  * Persisted to the database (botConfig table) so it survives restarts.
  * When Telegram migrates a group to supergroup, the old ID stops working for API calls
