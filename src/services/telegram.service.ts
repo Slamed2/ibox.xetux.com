@@ -36,6 +36,30 @@ function isGroupChat(ctx: any): boolean {
   return ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup';
 }
 
+/**
+ * Log user action to Chatwoot as an incoming message (so agents see what the user did).
+ * Used for group commands and callback button presses that don't get forwarded raw.
+ */
+async function logUserActionToChatwoot(
+  lookupId: number,
+  text: string,
+  senderName: string,
+  telegramMessageId?: number,
+) {
+  try {
+    const conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
+    if (!conversationId) return;
+    const content = isNaN(lookupId) || lookupId > 0 ? text : `${senderName}: ${text}`;
+    await chatwootService.sendMessage(conversationId, {
+      content,
+      message_type: 'incoming',
+      ...(telegramMessageId ? { source_id: String(telegramMessageId) } : {}),
+    });
+  } catch (err) {
+    logger.debug({ err, lookupId, text }, 'Failed to log user action to Chatwoot');
+  }
+}
+
 // Track pending department selection per user (waiting for country)
 const pendingDepartment = new Map<number, string>();
 
@@ -86,6 +110,11 @@ bot.command('start', async (ctx) => {
       metadata: { chatType: ctx.chat.type, username: ctx.from?.username ?? null },
     },
     async () => {
+      // Log command in Chatwoot for groups (raw command isn't forwarded)
+      if (isGroupChat(ctx)) {
+        await logUserActionToChatwoot(lookupId, text || '/start', ctx.from?.first_name ?? 'Unknown', ctx.message?.message_id);
+      }
+
       // Check for deep link: /start XETUXID-VE00029 or XETUXID_MX00023
       // Format: 2 letters (MX/VE) + 5 digits
       const match = text.match(/XETUXID[-_]+([A-Za-z]{2}\d{5})/);
@@ -150,6 +179,11 @@ bot.command('registro', async (ctx) => {
       metadata: { username: ctx.from?.username ?? null, chatType: ctx.chat.type },
     },
     async () => {
+      // Log command in Chatwoot for groups
+      if (isGroupChat(ctx)) {
+        await logUserActionToChatwoot(lookupId, '/registro', ctx.from?.first_name ?? 'Unknown', ctx.message?.message_id);
+      }
+
       // Find conversation and contact in Chatwoot
       const conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
       const conversation = conversationId ? await chatwootService.getConversation(conversationId) : null;
@@ -223,6 +257,11 @@ async function handleDepartmentCommand(ctx: any, command: string, displayName: s
       metadata: { command, username: ctx.from?.username ?? null, chatType: ctx.chat?.type },
     },
     async () => {
+      // Log command in Chatwoot for groups
+      if (isGroupChat(ctx)) {
+        await logUserActionToChatwoot(lookupId, `/${command}`, ctx.from?.first_name ?? 'Unknown', ctx.message?.message_id);
+      }
+
       if (!COUNTRY_COMMANDS[command]) {
         return { action: 'unknown_command', command };
       }
@@ -324,6 +363,9 @@ bot.on('callback_query:data', async (ctx) => {
       },
       async () => {
         await ctx.answerCallbackQuery();
+
+        // Log button press in Chatwoot as incoming message
+        await logUserActionToChatwoot(lookupId, `Seleccionó: ${teamLabel}`, ctx.from?.first_name ?? 'Unknown');
 
         const conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
 
