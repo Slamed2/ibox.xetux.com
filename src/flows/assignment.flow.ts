@@ -31,7 +31,7 @@ export async function handleConversationUpdated(payload: ChatwootWebhookPayload)
     const previousAssigneeId = assigneeChange.assignee_id.previous_value as number | null;
     const currentAssigneeId = assigneeChange.assignee_id.current_value as number | null;
 
-    if (previousAssigneeId !== currentAssigneeId && currentAssigneeId && !wasBotAssignment(conversation.id)) {
+    if (previousAssigneeId !== currentAssigneeId && currentAssigneeId) {
       await handleAssigneeChange(conversation, telegramUserId, currentAssigneeId, payload);
     }
   }
