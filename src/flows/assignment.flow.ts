@@ -1,7 +1,7 @@
 import { chatwootService } from '../services/chatwoot.service.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
 import { bot, wasBotAssignment, markBotAssignment } from '../services/telegram.service.js';
-import { TEAM_LABELS, TEAM_NAMES, ALL_DEPARTMENT_LABELS } from '../services/department-menu.js';
+import { TEAM_LABELS, TEAM_NAMES } from '../services/department-menu.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { logger } from '../utils/logger.js';
 
@@ -56,7 +56,7 @@ async function handleTeamChange(conversation: any, telegramUserId: number | unde
       // Telegram send + label replace (parallel — independent of each other)
       const [sentMsg] = await Promise.all([
         telegramUserId ? bot.api.sendMessage(telegramUserId, message, { parse_mode: 'Markdown' }) : null,
-        teamLabelTag ? chatwootService.replaceDepartmentLabel(conversation.id, teamLabelTag, ALL_DEPARTMENT_LABELS) : null,
+        teamLabelTag ? chatwootService.addLabels(conversation.id, [teamLabelTag]) : null,
       ]);
 
       // Sync to Chatwoot (needs telegramMessageId)

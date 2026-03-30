@@ -7,7 +7,6 @@ import {
   TEAMS,
   TEAM_LABELS,
   TEAM_NAMES,
-  ALL_DEPARTMENT_LABELS,
   resolveTeamFromCommand,
 } from '../services/department-menu.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
@@ -156,7 +155,7 @@ async function handleTeamSelection(
       // Assign + label + telegram send (parallel — all independent)
       const [, , sentMsg] = await Promise.all([
         chatwootService.assignConversation(conversationId, { team_id: selection.teamId }),
-        teamLabelTag ? chatwootService.replaceDepartmentLabel(conversationId, teamLabelTag, ALL_DEPARTMENT_LABELS) : null,
+        teamLabelTag ? chatwootService.addLabels(conversationId, [teamLabelTag]) : null,
         telegramUserId ? bot.api.sendMessage(telegramUserId, confirmText, { parse_mode: 'Markdown' }) : null,
       ]);
 
@@ -269,7 +268,7 @@ async function handleDepartmentCommand(
         // Assign + label + telegram send (parallel — all independent)
         const [, , sentMsg] = await Promise.all([
           chatwootService.assignConversation(conversationId, { team_id: resolved.teamId }),
-          teamLabelTag ? chatwootService.replaceDepartmentLabel(conversationId, teamLabelTag, ALL_DEPARTMENT_LABELS) : null,
+          teamLabelTag ? chatwootService.addLabels(conversationId, [teamLabelTag]) : null,
           bot.api.sendMessage(telegramUserId, confirmText, { parse_mode: 'Markdown' }),
         ]);
 
