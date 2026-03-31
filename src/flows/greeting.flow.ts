@@ -1,7 +1,7 @@
 import { chatwootService } from '../services/chatwoot.service.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
 import { bot, enableUserCommands, resetUserCommands, consumePendingDeepLinkXetuxId } from '../services/telegram.service.js';
-import { MENU_TEXT, TEAMS } from '../services/department-menu.js';
+import { MENU_TEXT, TEAMS, buildDepartmentKeyboard } from '../services/department-menu.js';
 import { conversationNudgeState } from './routing.flow.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { config } from '../config.js';
@@ -132,12 +132,7 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
       } else {
         // Has xetux_id: greeting + department buttons
         const country = effectiveXetuxId!.toUpperCase().startsWith('MX') ? 'mx' : 've';
-        const deptKeyboard = new InlineKeyboard()
-          .text('💼 Consultoría', `team:${country === 'mx' ? TEAMS.CONSULTORIA_MX : TEAMS.CONSULTORIA_VE}:Consultoría`)
-          .text('🛠 Soporte', `team:${country === 'mx' ? TEAMS.SOPORTE_MX : TEAMS.SOPORTE_VE}:Soporte`)
-          .row()
-          .text('🛒 Ventas', `team:${country === 'mx' ? TEAMS.VENTAS_MX : TEAMS.VENTAS_VE}:Ventas`)
-          .text('📋 Administración', `team:${country === 'mx' ? TEAMS.ADMINISTRACION_MX : TEAMS.ADMINISTRACION_VE}:Administración`);
+        const deptKeyboard = buildDepartmentKeyboard(country);
 
         const sentMsg = await bot.api.sendMessage(telegramUserId, WELCOME_WITH_XETUX, {
           reply_markup: deptKeyboard,

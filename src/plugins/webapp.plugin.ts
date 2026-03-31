@@ -9,7 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import { chatwootService } from '../services/chatwoot.service.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
 import { bot, enableUserCommands } from '../services/telegram.service.js';
-import { TEAMS } from '../services/department-menu.js';
+import { TEAMS, buildDepartmentKeyboard, DEPARTMENT_MENU_CHATWOOT } from '../services/department-menu.js';
 import { conversationNudgeState } from '../flows/routing.flow.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
@@ -674,12 +674,7 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
           // Send department selection menu via Telegram
           if (telegramChatId) {
             const country = xetux_id.toUpperCase().startsWith('MX') ? 'mx' : 've';
-            const keyboard = new InlineKeyboard()
-              .text('💼 Consultoría', `team:${country === 'mx' ? TEAMS.CONSULTORIA_MX : TEAMS.CONSULTORIA_VE}:Consultoría`)
-              .text('🛠 Soporte', `team:${country === 'mx' ? TEAMS.SOPORTE_MX : TEAMS.SOPORTE_VE}:Soporte`)
-              .row()
-              .text('🛒 Ventas', `team:${country === 'mx' ? TEAMS.VENTAS_MX : TEAMS.VENTAS_VE}:Ventas`)
-              .text('📋 Administración', `team:${country === 'mx' ? TEAMS.ADMINISTRACION_MX : TEAMS.ADMINISTRACION_VE}:Administración`);
+            const keyboard = buildDepartmentKeyboard(country);
 
             const deptMsg = await bot.api.sendMessage(
               telegramChatId,
@@ -688,7 +683,7 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
             );
 
             await chatwootService.sendMessage(conversationIdNum, {
-              content: '¿Con qué departamento deseas comunicarte?\n\n💼 Consultoría | 🛠 Soporte | 🛒 Ventas | 📋 Administración',
+              content: DEPARTMENT_MENU_CHATWOOT,
               message_type: 'outgoing',
               source_id: String(deptMsg.message_id),
             });
