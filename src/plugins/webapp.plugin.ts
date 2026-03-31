@@ -91,8 +91,8 @@ const WEBAPP_HTML = `<!DOCTYPE html>
                 <div class="error-text" id="telefono-error">Ingresa un número de teléfono válido</div>
             </div>
             <div class="form-group">
-                <label for="email">Email *</label>
-                <input type="email" id="email" placeholder="Ej: juan@email.com" required>
+                <label for="email">Email</label>
+                <input type="email" id="email" placeholder="Ej: juan@email.com">
                 <div class="error-text" id="email-error">Ingresa un email válido</div>
             </div>
             <div class="form-group">
@@ -266,7 +266,7 @@ const WEBAPP_HTML = `<!DOCTYPE html>
                 valid = false;
             }
             var email = document.getElementById('email');
-            if (!email.value.trim() || email.value.indexOf('@') === -1) {
+            if (email.value.trim() && email.value.indexOf('@') === -1) {
                 email.classList.add('error');
                 document.getElementById('email-error').classList.add('visible');
                 valid = false;
@@ -396,8 +396,8 @@ const STANDALONE_LOGIN_HTML = `<!DOCTYPE html>
                 <div class="error-text" id="telefono-error">Ingresa un número de teléfono válido</div>
             </div>
             <div class="form-group">
-                <label for="email">Email *</label>
-                <input type="email" id="email" placeholder="Ej: juan@email.com" required>
+                <label for="email">Email</label>
+                <input type="email" id="email" placeholder="Ej: juan@email.com">
                 <div class="error-text" id="email-error">Ingresa un email válido</div>
             </div>
             <div class="form-group">
@@ -496,7 +496,7 @@ const STANDALONE_LOGIN_HTML = `<!DOCTYPE html>
             var telefono = document.getElementById('telefono');
             if (telefono.value.trim().length < 7) { telefono.classList.add('error'); document.getElementById('telefono-error').classList.add('visible'); valid = false; }
             var email = document.getElementById('email');
-            if (!email.value.trim() || email.value.indexOf('@') === -1) { email.classList.add('error'); document.getElementById('email-error').classList.add('visible'); valid = false; }
+            if (email.value.trim() && email.value.indexOf('@') === -1) { email.classList.add('error'); document.getElementById('email-error').classList.add('visible'); valid = false; }
             var xetux_id = document.getElementById('xetux_id');
             var regex = /^(?:MX|VE)\\d{5}$/;
             if (!regex.test(xetux_id.value.trim())) { xetux_id.classList.add('error'); document.getElementById('xetux_id-error').classList.add('visible'); valid = false; }
@@ -651,7 +651,9 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
           await chatwootService.addLabels(conversationIdNum, [isMX ? 'mexico' : 'venezuela']);
 
           // Send registration details as internal note in Chatwoot
-          const regDetails = [`✅ Registro completado:`, `• Nombre: ${nombre}`, `• Teléfono: ${telefono}`, `• Email: ${email}`, `• Xetux ID: ${xetux_id}`];
+          const regDetails = [`✅ Registro completado:`, `• Nombre: ${nombre}`, `• Teléfono: ${telefono}`];
+          if (email) regDetails.push(`• Email: ${email}`);
+          regDetails.push(`• Xetux ID: ${xetux_id}`);
           if (empresa) regDetails.push(`• Empresa: ${empresa}`);
           await chatwootService.sendMessage(conversationIdNum, {
             content: regDetails.join('\n'),
