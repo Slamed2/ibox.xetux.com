@@ -5,21 +5,6 @@ import { bot, setupTelegramWebhook, registerGroupMigration, getMigratedGroupId }
 import { keepAliveHttpAgent, keepAliveHttpsAgent } from '../services/chatwoot.service.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
-import { TtlMap } from '../utils/ttl-map.js';
-
-/**
- * Track original sender IDs from group messages.
- * When a group message is forwarded to Chatwoot, we store the original from.id (positive)
- * so the greeting flow can suppress duplicate private-chat greetings.
- * Entries expire after 30 seconds.
- */
-const recentGroupSenders = new TtlMap<number, true>(30_000);
-
-export function wasRecentGroupSender(userId: number): boolean {
-  return recentGroupSenders.has(userId);
-}
-
-
 export const telegramPlugin: FastifyPluginAsync = async (fastify) => {
   // Register webhook route with secret path
   const webhookPath = `/telegram/${config.TELEGRAM_WEBHOOK_SECRET}`;
@@ -135,13 +120,6 @@ function transformGroupMessage(body: unknown): unknown {
 
   const chatType = msg.chat.type;
   if (chatType !== 'group' && chatType !== 'supergroup') return body;
-
-  // Store the original sender ID before transformation so the greeting flow
-  // can suppress the duplicate private-chat greeting that Chatwoot may trigger.
-  const originalFromId = msg.from?.id;
-  if (originalFromId && originalFromId > 0) {
-    recentGroupSenders.set(originalFromId, true);
-  }
 
   const transformed = JSON.parse(JSON.stringify(body));
   const tMsg = transformed.message ?? transformed.edited_message;
