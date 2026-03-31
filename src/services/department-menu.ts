@@ -1,4 +1,8 @@
-import { Keyboard } from 'grammy';
+import { Keyboard, InlineKeyboard } from 'grammy';
+
+// ─── Feature flags ──────────────────────────────────────────────────────────
+// Set to true to show Ventas and Administración in menus and commands
+export const VENTAS_ADMIN_ENABLED = false;
 
 // Team IDs from Chatwoot
 export const TEAMS = {
@@ -76,13 +80,39 @@ export const GUEST_COMMANDS = [
 export const BOT_COMMANDS = [
   { command: 'consultoria', description: '💼 Chatear con Consultoría' },
   { command: 'soporte', description: '🛠 Chatear con Soporte' },
-  { command: 'ventas', description: '🛒 Chatear con Ventas' },
-  { command: 'administracion', description: '📋 Chatear con Administración' },
+  ...(VENTAS_ADMIN_ENABLED
+    ? [
+        { command: 'ventas', description: '🛒 Chatear con Ventas' },
+        { command: 'administracion', description: '📋 Chatear con Administración' },
+      ]
+    : []),
 ];
 
 // Text representation for Chatwoot sync
-export const MENU_TEXT =
-  '💼 /consultoria | 🛠 /soporte | 🛒 /ventas | 📋 /administracion';
+export const MENU_TEXT = VENTAS_ADMIN_ENABLED
+  ? '💼 /consultoria | 🛠 /soporte | 🛒 /ventas | 📋 /administracion'
+  : '💼 /consultoria | 🛠 /soporte';
+
+/**
+ * Build the inline keyboard for department selection.
+ * Respects VENTAS_ADMIN_ENABLED flag.
+ */
+export function buildDepartmentKeyboard(country: 'mx' | 've'): InlineKeyboard {
+  const kb = new InlineKeyboard()
+    .text('💼 Consultoría', `team:${country === 'mx' ? TEAMS.CONSULTORIA_MX : TEAMS.CONSULTORIA_VE}:Consultoría`)
+    .text('🛠 Soporte', `team:${country === 'mx' ? TEAMS.SOPORTE_MX : TEAMS.SOPORTE_VE}:Soporte`);
+  if (VENTAS_ADMIN_ENABLED) {
+    kb.row()
+      .text('🛒 Ventas', `team:${country === 'mx' ? TEAMS.VENTAS_MX : TEAMS.VENTAS_VE}:Ventas`)
+      .text('📋 Administración', `team:${country === 'mx' ? TEAMS.ADMINISTRACION_MX : TEAMS.ADMINISTRACION_VE}:Administración`);
+  }
+  return kb;
+}
+
+/** Text version of department menu for Chatwoot sync */
+export const DEPARTMENT_MENU_CHATWOOT = VENTAS_ADMIN_ENABLED
+  ? '¿Con qué departamento deseas comunicarte?\n\n💼 Consultoría | 🛠 Soporte | 🛒 Ventas | 📋 Administración'
+  : '¿Con qué departamento deseas comunicarte?\n\n💼 Consultoría | 🛠 Soporte';
 
 /**
  * Resolve a department command + xetux_id to a specific team.

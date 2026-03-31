@@ -274,17 +274,25 @@ export async function setupTelegramWebhook(webhookUrl: string) {
 // ─── Per-user command scopes ─────────────────────────────────────────────────
 
 export async function enableUserCommands(telegramChatId: number) {
-  await bot.api.setMyCommands(BOT_COMMANDS, {
-    scope: { type: 'chat', chat_id: telegramChatId },
-  });
-  logger.info({ telegramChatId }, 'Department commands enabled for chat');
+  try {
+    await bot.api.setMyCommands(BOT_COMMANDS, {
+      scope: { type: 'chat', chat_id: telegramChatId },
+    });
+    logger.info({ telegramChatId }, 'Department commands enabled for chat');
+  } catch (err) {
+    logger.warn({ telegramChatId, err: (err as Error).message }, 'Failed to set commands — bot may have been removed from chat');
+  }
 }
 
 export async function resetUserCommands(telegramChatId: number) {
-  await bot.api.setMyCommands(GUEST_COMMANDS, {
-    scope: { type: 'chat', chat_id: telegramChatId },
-  });
-  logger.info({ telegramChatId }, 'Commands reset to guest menu for chat');
+  try {
+    await bot.api.setMyCommands(GUEST_COMMANDS, {
+      scope: { type: 'chat', chat_id: telegramChatId },
+    });
+    logger.info({ telegramChatId }, 'Commands reset to guest menu for chat');
+  } catch (err) {
+    logger.warn({ telegramChatId, err: (err as Error).message }, 'Failed to reset commands — bot may have been removed from chat');
+  }
 }
 
 // ─── Utility ─────────────────────────────────────────────────────────────────

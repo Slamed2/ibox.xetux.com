@@ -8,6 +8,9 @@ import {
   TEAM_LABELS,
   TEAM_NAMES,
   resolveTeamFromCommand,
+  buildDepartmentKeyboard,
+  DEPARTMENT_MENU_CHATWOOT,
+  VENTAS_ADMIN_ENABLED,
 } from '../services/department-menu.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { config } from '../config.js';
@@ -130,12 +133,7 @@ export async function handleMessageCreated(payload: ChatwootWebhookPayload) {
       conversationNudgeState.set(conversationId, 'dept_reminded');
 
       const country = xetuxId?.toUpperCase().startsWith('MX') ? 'mx' : 've';
-      const keyboard = new InlineKeyboard()
-        .text('💼 Consultoría', `team:${country === 'mx' ? TEAMS.CONSULTORIA_MX : TEAMS.CONSULTORIA_VE}:Consultoría`)
-        .text('🛠 Soporte', `team:${country === 'mx' ? TEAMS.SOPORTE_MX : TEAMS.SOPORTE_VE}:Soporte`)
-        .row()
-        .text('🛒 Ventas', `team:${country === 'mx' ? TEAMS.VENTAS_MX : TEAMS.VENTAS_VE}:Ventas`)
-        .text('📋 Administración', `team:${country === 'mx' ? TEAMS.ADMINISTRACION_MX : TEAMS.ADMINISTRACION_VE}:Administración`);
+      const keyboard = buildDepartmentKeyboard(country);
 
       const sentMsg = await bot.api.sendMessage(telegramUserId, NUDGE_SELECT_DEPARTMENT, { reply_markup: keyboard });
       await chatwootService.sendMessage(conversationId, {
@@ -263,12 +261,7 @@ async function handleRegistroCommand(
       // Already registered: show department menu
       if (xetuxId) {
         const country = xetuxId.toUpperCase().startsWith('MX') ? 'mx' : 've';
-        const keyboard = new InlineKeyboard()
-          .text('💼 Consultoría', `team:${country === 'mx' ? TEAMS.CONSULTORIA_MX : TEAMS.CONSULTORIA_VE}:Consultoría`)
-          .text('🛠 Soporte', `team:${country === 'mx' ? TEAMS.SOPORTE_MX : TEAMS.SOPORTE_VE}:Soporte`)
-          .row()
-          .text('🛒 Ventas', `team:${country === 'mx' ? TEAMS.VENTAS_MX : TEAMS.VENTAS_VE}:Ventas`)
-          .text('📋 Administración', `team:${country === 'mx' ? TEAMS.ADMINISTRACION_MX : TEAMS.ADMINISTRACION_VE}:Administración`);
+        const keyboard = buildDepartmentKeyboard(country);
 
         const sentMsg = await bot.api.sendMessage(telegramUserId, 'Ya estás registrado. ¿Con qué departamento deseas comunicarte?', { reply_markup: keyboard });
         conversationNudgeState.set(conversationId, 'dept_pending');
@@ -322,6 +315,12 @@ async function handleDepartmentCommand(
     async () => {
       if (!telegramUserId) {
         return { action: 'no_telegram_user' };
+      }
+
+      // Block disabled departments
+      if (!VENTAS_ADMIN_ENABLED && (command === 'ventas' || command === 'administracion')) {
+        await bot.api.sendMessage(telegramUserId, 'Este departamento no está disponible por el momento. Usa /consultoria o /soporte.');
+        return { action: 'department_disabled', command };
       }
 
       // Resolve team from xetux_id country

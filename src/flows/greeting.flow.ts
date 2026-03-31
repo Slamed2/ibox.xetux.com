@@ -1,8 +1,7 @@
 import { chatwootService } from '../services/chatwoot.service.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
 import { bot, enableUserCommands, resetUserCommands, consumePendingDeepLinkXetuxId } from '../services/telegram.service.js';
-import { MENU_TEXT, TEAMS } from '../services/department-menu.js';
-import { wasRecentGroupSender } from '../plugins/telegram.plugin.js';
+import { MENU_TEXT, TEAMS, buildDepartmentKeyboard } from '../services/department-menu.js';
 import { conversationNudgeState } from './routing.flow.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { config } from '../config.js';
@@ -44,15 +43,6 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
   const telegramUserId = contact?.additional_attributes?.social_telegram_user_id as number | undefined;
 
   logger.info({ telegramUserId, xetuxId, conversationId: conversation.id }, 'Greeting flow: conversation created');
-
-  // Suppress duplicate greeting for private chats when the user just sent a group message.
-  // When a group message is forwarded to Chatwoot (transformed), Chatwoot may also create/reopen
-  // a private conversation for the same user, firing a second conversation_created event.
-  // We only want the GROUP greeting, not the private one.
-  if (telegramUserId && telegramUserId > 0 && wasRecentGroupSender(telegramUserId)) {
-    logger.info({ telegramUserId, conversationId: conversation.id }, 'Greeting flow: suppressed — user recently sent a group message');
-    return;
-  }
 
   await withExecutionLog(
     {
@@ -142,12 +132,7 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
       } else {
         // Has xetux_id: greeting + department buttons
         const country = effectiveXetuxId!.toUpperCase().startsWith('MX') ? 'mx' : 've';
-        const deptKeyboard = new InlineKeyboard()
-          .text('💼 Consultoría', `team:${country === 'mx' ? TEAMS.CONSULTORIA_MX : TEAMS.CONSULTORIA_VE}:Consultoría`)
-          .text('🛠 Soporte', `team:${country === 'mx' ? TEAMS.SOPORTE_MX : TEAMS.SOPORTE_VE}:Soporte`)
-          .row()
-          .text('🛒 Ventas', `team:${country === 'mx' ? TEAMS.VENTAS_MX : TEAMS.VENTAS_VE}:Ventas`)
-          .text('📋 Administración', `team:${country === 'mx' ? TEAMS.ADMINISTRACION_MX : TEAMS.ADMINISTRACION_VE}:Administración`);
+        const deptKeyboard = buildDepartmentKeyboard(country);
 
         const sentMsg = await bot.api.sendMessage(telegramUserId, WELCOME_WITH_XETUX, {
           reply_markup: deptKeyboard,
