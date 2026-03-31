@@ -387,9 +387,9 @@ const STANDALONE_LOGIN_HTML = `<!DOCTYPE html>
         <p class="subtitle">Completa tus datos para continuar</p>
         <form id="contact-form">
             <div class="form-group">
-                <label for="nombre">Nombre completo *</label>
-                <input type="text" id="nombre" placeholder="Ej: Juan Perez" required>
-                <div class="error-text" id="nombre-error">Este campo es obligatorio</div>
+                <label for="empresa">Empresa *</label>
+                <input type="text" id="empresa" placeholder="Ej: Mi Empresa C.A." required>
+                <div class="error-text" id="empresa-error">Este campo es obligatorio</div>
             </div>
             <div class="form-group">
                 <label for="telefono">Teléfono *</label>
@@ -408,11 +408,6 @@ const STANDALONE_LOGIN_HTML = `<!DOCTYPE html>
                 </div>
                 <input type="text" id="xetux_id" placeholder="Ej: VE00029 o MX00023" required autocapitalize="characters" maxlength="7">
                 <div class="error-text" id="xetux_id-error">Formato: 2 letras (MX o VE) + 5 digitos. Ej: VE00029</div>
-            </div>
-            <div class="form-group">
-                <label for="empresa">Empresa *</label>
-                <input type="text" id="empresa" placeholder="Ej: Mi Empresa C.A." required>
-                <div class="error-text" id="empresa-error">Este campo es obligatorio</div>
             </div>
             <button type="button" class="submit-btn" id="submit-btn">Enviar datos</button>
         </form>
@@ -492,8 +487,8 @@ const STANDALONE_LOGIN_HTML = `<!DOCTYPE html>
             for (var i = 0; i < errors.length; i++) errors[i].classList.remove('error');
             var errTexts = document.querySelectorAll('.error-text');
             for (var i = 0; i < errTexts.length; i++) errTexts[i].classList.remove('visible');
-            var nombre = document.getElementById('nombre');
-            if (!nombre.value.trim()) { nombre.classList.add('error'); document.getElementById('nombre-error').classList.add('visible'); valid = false; }
+            var empresa = document.getElementById('empresa');
+            if (!empresa.value.trim()) { empresa.classList.add('error'); document.getElementById('empresa-error').classList.add('visible'); valid = false; }
             var telefono = document.getElementById('telefono');
             if (telefono.value.trim().length < 7) { telefono.classList.add('error'); document.getElementById('telefono-error').classList.add('visible'); valid = false; }
             var email = document.getElementById('email');
@@ -501,8 +496,6 @@ const STANDALONE_LOGIN_HTML = `<!DOCTYPE html>
             var xetux_id = document.getElementById('xetux_id');
             var regex = /^(?:MX|VE)\\d{5}$/;
             if (!regex.test(xetux_id.value.trim())) { xetux_id.classList.add('error'); document.getElementById('xetux_id-error').classList.add('visible'); valid = false; }
-            var empresa = document.getElementById('empresa');
-            if (!empresa.value.trim()) { empresa.classList.add('error'); document.getElementById('empresa-error').classList.add('visible'); valid = false; }
             return valid;
         }
 
@@ -511,8 +504,9 @@ const STANDALONE_LOGIN_HTML = `<!DOCTYPE html>
             var btn = this;
             btn.disabled = true;
             btn.textContent = 'Enviando...';
+            var empresaVal = document.getElementById('empresa').value.trim();
             var data = {
-                nombre: document.getElementById('nombre').value.trim(),
+                nombre: 'Grupos - ' + empresaVal,
                 telefono: iti.getNumber() || document.getElementById('telefono').value.trim(),
                 email: document.getElementById('email').value.trim(),
                 xetux_id: document.getElementById('xetux_id').value.trim(),
