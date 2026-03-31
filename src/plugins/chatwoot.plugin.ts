@@ -114,6 +114,20 @@ export const chatwootPlugin: FastifyPluginAsync = async (fastify) => {
       }
     }
 
+    // Skip contact_created (unused) and contact_updated unless xetux_id was removed
+    if (event === 'contact_created') {
+      logger.debug({ event }, 'Ignoring contact_created — not used');
+      return { status: 'ok' };
+    }
+    if (event === 'contact_updated') {
+      const changedAttrs = raw.changed_attributes as any[] | undefined;
+      const hasCustomAttrsChange = changedAttrs?.some((c: any) => c.custom_attributes);
+      if (!hasCustomAttrsChange) {
+        logger.debug({ event }, 'Ignoring contact_updated — no custom_attributes change');
+        return { status: 'ok' };
+      }
+    }
+
     const conversationId = payload.conversation?.id ?? (raw.id as number);
     logger.info({ event, inboxId, conversationId }, 'Chatwoot webhook received');
 
