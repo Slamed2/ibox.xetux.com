@@ -12,9 +12,23 @@ import {
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
+import { TtlMap } from '../utils/ttl-map.js';
 
 // TODO: Configurar keywords y sus team_ids correspondientes
 const KEYWORD_ROUTES: Array<{ keywords: string[]; teamId: number; label: string }> = [];
+
+/**
+ * Track nudge state per conversation to send exactly ONE reminder
+ * when a user ignores the login button or department menu.
+ */
+type NudgeState = 'login_pending' | 'login_reminded' | 'dept_pending' | 'dept_reminded';
+export const conversationNudgeState = new TtlMap<number, NudgeState>(30 * 60_000); // 30 min TTL
+
+const NUDGE_REGISTER =
+  '👋 Para poder atenderte, necesitamos que inicies sesión primero.\nToca el botón de abajo:';
+
+const NUDGE_SELECT_DEPARTMENT =
+  '👋 Para continuar, selecciona el departamento con el que deseas comunicarte:';
 
 /**
  * Extract a bot command from message content.
@@ -89,6 +103,56 @@ export async function handleMessageCreated(payload: ChatwootWebhookPayload) {
     return;
   }
 
+  // --- Nudge: one-time reminder for users ignoring login or department buttons ---
+  if (telegramUserId) {
+    const nudgeState = conversationNudgeState.get(conversationId);
+
+    if (nudgeState === 'login_pending') {
+      conversationNudgeState.set(conversationId, 'login_reminded');
+
+      const webappUrl = `${config.WEBAPP_BASE_URL}?contact_id=${contactId ?? ''}&conversation_id=${conversationId}`;
+      const isGroup = telegramUserId < 0;
+      const keyboard = isGroup
+        ? new InlineKeyboard().url('🔑 Iniciar sesión', webappUrl.replace('/webapp?', '/webapp/login?'))
+        : new InlineKeyboard().webApp('🔑 Iniciar sesión', webappUrl);
+
+      const sentMsg = await bot.api.sendMessage(telegramUserId, NUDGE_REGISTER, { reply_markup: keyboard });
+      await chatwootService.sendMessage(conversationId, {
+        content: `${NUDGE_REGISTER}\n\n🔗 [Iniciar sesión](${webappUrl})`,
+        message_type: 'outgoing',
+        source_id: String(sentMsg.message_id),
+      });
+      logger.info({ conversationId }, 'Nudge: sent login reminder');
+      return;
+    }
+
+    if (nudgeState === 'dept_pending') {
+      conversationNudgeState.set(conversationId, 'dept_reminded');
+
+      const country = xetuxId?.toUpperCase().startsWith('MX') ? 'mx' : 've';
+      const keyboard = new InlineKeyboard()
+        .text('💼 Consultoría', `team:${country === 'mx' ? TEAMS.CONSULTORIA_MX : TEAMS.CONSULTORIA_VE}:Consultoría`)
+        .text('🛠 Soporte', `team:${country === 'mx' ? TEAMS.SOPORTE_MX : TEAMS.SOPORTE_VE}:Soporte`)
+        .row()
+        .text('🛒 Ventas', `team:${country === 'mx' ? TEAMS.VENTAS_MX : TEAMS.VENTAS_VE}:Ventas`)
+        .text('📋 Administración', `team:${country === 'mx' ? TEAMS.ADMINISTRACION_MX : TEAMS.ADMINISTRACION_VE}:Administración`);
+
+      const sentMsg = await bot.api.sendMessage(telegramUserId, NUDGE_SELECT_DEPARTMENT, { reply_markup: keyboard });
+      await chatwootService.sendMessage(conversationId, {
+        content: NUDGE_SELECT_DEPARTMENT,
+        message_type: 'outgoing',
+        source_id: String(sentMsg.message_id),
+      });
+      logger.info({ conversationId }, 'Nudge: sent department reminder');
+      return;
+    }
+
+    // Already reminded or no state — do nothing
+    if (nudgeState === 'login_reminded' || nudgeState === 'dept_reminded') {
+      return;
+    }
+  }
+
   // --- Keyword routing (existing) ---
   await withExecutionLog(
     {
@@ -148,6 +212,7 @@ async function handleTeamSelection(
 
       // Mark as bot assignment to suppress duplicate notifications in assignment.flow
       markBotAssignment(conversationId);
+      conversationNudgeState.delete(conversationId);
 
       const teamLabelTag = TEAM_LABELS[selection.teamId];
       const confirmText = `✅ Conversación #${conversationId} asignada a *${selection.teamLabel}*.\n\nUn agente te atenderá pronto.\n\nSi deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.`;
@@ -206,6 +271,7 @@ async function handleRegistroCommand(
           .text('📋 Administración', `team:${country === 'mx' ? TEAMS.ADMINISTRACION_MX : TEAMS.ADMINISTRACION_VE}:Administración`);
 
         const sentMsg = await bot.api.sendMessage(telegramUserId, 'Ya estás registrado. ¿Con qué departamento deseas comunicarte?', { reply_markup: keyboard });
+        conversationNudgeState.set(conversationId, 'dept_pending');
         await chatwootService.sendMessage(conversationId, {
           content: 'Ya estás registrado. ¿Con qué departamento deseas comunicarte?',
           message_type: 'outgoing',
@@ -222,6 +288,7 @@ async function handleRegistroCommand(
         : new InlineKeyboard().webApp('🔑 Iniciar sesión', webappUrl);
 
       const sentMsg = await bot.api.sendMessage(telegramUserId, 'Toca el botón para iniciar sesión:', { reply_markup: keyboard });
+      conversationNudgeState.set(conversationId, 'login_pending');
       await chatwootService.sendMessage(conversationId, {
         content: `Toca el botón para iniciar sesión:\n\n🔗 [Iniciar sesión](${webappUrl})`,
         message_type: 'outgoing',
@@ -261,6 +328,7 @@ async function handleDepartmentCommand(
       const resolved = resolveTeamFromCommand(command, xetuxId);
       if (resolved) {
         markBotAssignment(conversationId);
+        conversationNudgeState.delete(conversationId);
 
         const teamLabelTag = TEAM_LABELS[resolved.teamId];
         const confirmText = `✅ Conversación #${conversationId} asignada a *${resolved.label}*.\n\nUn agente te atenderá pronto.\n\nSi deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.`;

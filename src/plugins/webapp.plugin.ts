@@ -10,6 +10,7 @@ import { chatwootService } from '../services/chatwoot.service.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
 import { bot, enableUserCommands } from '../services/telegram.service.js';
 import { TEAMS } from '../services/department-menu.js';
+import { conversationNudgeState } from '../flows/routing.flow.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 
@@ -697,6 +698,8 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
               message_type: 'outgoing',
               source_id: String(deptMsg.message_id),
             });
+
+            conversationNudgeState.set(conversationIdNum, 'dept_pending');
           }
 
           logger.info({ contactId: contact_id, conversationId: conversation_id, xetux_id }, 'WebApp registration completed');

@@ -3,6 +3,7 @@ import { withExecutionLog } from '../services/execution-log.service.js';
 import { bot, enableUserCommands, resetUserCommands, consumePendingDeepLinkXetuxId } from '../services/telegram.service.js';
 import { MENU_TEXT, TEAMS } from '../services/department-menu.js';
 import { wasRecentGroupSender } from '../plugins/telegram.plugin.js';
+import { conversationNudgeState } from './routing.flow.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
@@ -121,6 +122,7 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
           content_attributes: { external_created_at: new Date().toISOString() },
           source_id: String(telegramMessageId),
         });
+        conversationNudgeState.set(conversation.id, 'login_pending');
       } else if (deepLinkXetuxId && !xetuxId) {
         // Deep link: xetux_id known but need to complete registration — show webapp + greeting
         const loginKeyboard = loginButton('🔑 Completar registro', webappUrl, telegramUserId!);
@@ -136,6 +138,7 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
           content_attributes: { external_created_at: new Date().toISOString() },
           source_id: String(telegramMessageId),
         });
+        conversationNudgeState.set(conversation.id, 'login_pending');
       } else {
         // Has xetux_id: greeting + department buttons
         const country = effectiveXetuxId!.toUpperCase().startsWith('MX') ? 'mx' : 've';
@@ -157,6 +160,7 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
           content_attributes: { external_created_at: new Date().toISOString() },
           source_id: String(telegramMessageId),
         });
+        conversationNudgeState.set(conversation.id, 'dept_pending');
       }
 
       // Mark as recently greeted so routing flow skips duplicate command handling
