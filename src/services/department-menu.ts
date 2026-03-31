@@ -12,12 +12,6 @@ export const TEAMS = {
   CONSULTORIA_MX: 8,
 } as const;
 
-// Old team IDs (kept for backward compatibility with existing conversations)
-export const LEGACY_TEAMS = {
-  VENTAS: 6,
-  ADMINISTRACION: 7,
-} as const;
-
 // Team ID → Chatwoot label mapping
 export const TEAM_LABELS: Record<number, string> = {
   [TEAMS.SOPORTE_MX]: 'soporte-mexico',
@@ -28,9 +22,6 @@ export const TEAM_LABELS: Record<number, string> = {
   [TEAMS.VENTAS_VE]: 'ventas-venezuela',
   [TEAMS.ADMINISTRACION_MX]: 'administracion-mexico',
   [TEAMS.ADMINISTRACION_VE]: 'administracion-venezuela',
-  // Legacy
-  [LEGACY_TEAMS.VENTAS]: 'ventas',
-  [LEGACY_TEAMS.ADMINISTRACION]: 'administracion',
 };
 
 // All department label values — used to remove old department labels before adding a new one
@@ -46,8 +37,6 @@ export const TEAM_NAMES: Record<number, string> = {
   [TEAMS.VENTAS_VE]: 'Ventas Venezuela',
   [TEAMS.ADMINISTRACION_MX]: 'Administración México',
   [TEAMS.ADMINISTRACION_VE]: 'Administración Venezuela',
-  [LEGACY_TEAMS.VENTAS]: 'Ventas',
-  [LEGACY_TEAMS.ADMINISTRACION]: 'Administración',
 };
 
 // All departments now require country — resolved by xetux_id prefix
