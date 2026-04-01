@@ -40,7 +40,7 @@ export function Filters({ filters, onChange }: FiltersProps) {
           type="text"
           value={filters.search ?? ''}
           onChange={(e) => onChange({ ...filters, search: e.target.value || undefined, page: 1 })}
-          placeholder="XETUXID, team:7, etc."
+          placeholder="Buscar mensaje, XETUXID, team:7..."
           className="border rounded px-3 py-1.5 text-sm w-48"
         />
       </div>

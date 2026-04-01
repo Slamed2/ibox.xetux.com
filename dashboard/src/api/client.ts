@@ -30,3 +30,15 @@ export async function fetchLogStats(): Promise<LogStats> {
   if (!res.ok) throw new Error(`Failed to fetch stats: ${res.statusText}`);
   return res.json();
 }
+
+export async function cleanupByStatus(status: string): Promise<{ deleted: number }> {
+  const res = await fetch(`${BASE_URL}/logs/cleanup/${status}`, { method: 'POST' });
+  if (!res.ok) throw new Error(`Failed to cleanup: ${res.statusText}`);
+  return res.json();
+}
+
+export async function cleanupOldLogs(): Promise<{ deleted: number; retentionDays: number }> {
+  const res = await fetch(`${BASE_URL}/logs/cleanup`, { method: 'POST' });
+  if (!res.ok) throw new Error(`Failed to cleanup: ${res.statusText}`);
+  return res.json();
+}

@@ -5,62 +5,57 @@ import { eq, desc, and, gte, lte, lt, sql, count, avg, or, ilike, ne } from 'dri
 import type { CreateExecutionLog, ExecutionLogResult, LogFilters, LogStats } from '../types/execution-log.types.js';
 import { logger } from '../utils/logger.js';
 
-// ─── Async (fire-and-forget) logging — non-blocking ────────────────────────
-
-function startExecutionAsync(data: CreateExecutionLog): string {
-  const logId = randomUUID();
-  db.insert(executionLogs).values({
-    id: logId,
-    eventType: data.eventType,
-    source: data.source,
-    direction: data.direction,
-    status: 'pending',
-    inputData: data.inputData,
-    conversationId: data.conversationId,
-    contactId: data.contactId,
-    metadata: data.metadata ?? {},
-  }).catch(err => logger.error({ err, logId }, 'Failed to insert execution log'));
-  return logId;
-}
-
-function completeExecutionAsync(logId: string, result: ExecutionLogResult): void {
-  db.update(executionLogs)
-    .set({
-      status: result.status,
-      outputData: result.outputData ?? null,
-      errorMessage: result.errorMessage ?? null,
-      durationMs: result.durationMs,
-      updatedAt: new Date(),
-    })
-    .where(eq(executionLogs.id, logId))
-    .catch(err => logger.error({ err, logId }, 'Failed to update execution log'));
-}
+// ─── Execution logging — awaits INSERT so UPDATE always finds the row ──────
 
 export async function withExecutionLog<T>(
   data: CreateExecutionLog,
   fn: () => Promise<T>,
 ): Promise<T> {
+  const logId = randomUUID();
   const startTime = Date.now();
-  const logId = startExecutionAsync(data);
+
+  // Await the INSERT so the row exists before the function runs
+  try {
+    await db.insert(executionLogs).values({
+      id: logId,
+      eventType: data.eventType,
+      source: data.source,
+      direction: data.direction,
+      status: 'pending',
+      inputData: data.inputData,
+      conversationId: data.conversationId,
+      contactId: data.contactId,
+      metadata: data.metadata ?? {},
+    });
+  } catch (err) {
+    logger.error({ err, logId }, 'Failed to insert execution log');
+  }
 
   try {
     const result = await fn();
-    completeExecutionAsync(logId, {
-      id: logId,
-      status: 'success',
-      outputData: result,
-      durationMs: Date.now() - startTime,
-    });
+    // Fire-and-forget UPDATE — row already exists
+    db.update(executionLogs)
+      .set({
+        status: 'success',
+        outputData: result ?? null,
+        durationMs: Date.now() - startTime,
+        updatedAt: new Date(),
+      })
+      .where(eq(executionLogs.id, logId))
+      .catch(err => logger.error({ err, logId }, 'Failed to update execution log'));
     return result;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error({ logId, error: errorMessage }, 'Execution failed');
-    completeExecutionAsync(logId, {
-      id: logId,
-      status: 'error',
-      errorMessage,
-      durationMs: Date.now() - startTime,
-    });
+    db.update(executionLogs)
+      .set({
+        status: 'error',
+        errorMessage,
+        durationMs: Date.now() - startTime,
+        updatedAt: new Date(),
+      })
+      .where(eq(executionLogs.id, logId))
+      .catch(err => logger.error({ err, logId }, 'Failed to update execution log'));
     throw error;
   }
 }
@@ -87,10 +82,17 @@ export async function queryLogs(filters: LogFilters) {
     const term = `%${filters.search}%`;
     conditions.push(
       or(
+        // Full JSON text search
         sql`${executionLogs.inputData}::text ILIKE ${term}`,
         sql`${executionLogs.outputData}::text ILIKE ${term}`,
         ilike(executionLogs.eventType, term),
         sql`${executionLogs.metadata}::text ILIKE ${term}`,
+        // Specific message content paths (optimizable with GIN indexes)
+        sql`${executionLogs.inputData}->>'content' ILIKE ${term}`,
+        sql`${executionLogs.inputData}->'message'->>'content' ILIKE ${term}`,
+        sql`${executionLogs.inputData}->>'text' ILIKE ${term}`,
+        // Error message column
+        ilike(executionLogs.errorMessage, term),
       )!,
     );
   }
