@@ -3,7 +3,7 @@ import fastifyStatic from '@fastify/static';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { queryLogs, getLogById, getLogStats, cleanupOldLogs } from '../services/execution-log.service.js';
+import { queryLogs, getLogById, getLogStats, cleanupOldLogs, cleanupPendingLogs } from '../services/execution-log.service.js';
 import { registerGroupMigration, getMigratedGroupId } from '../services/telegram.service.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
@@ -57,6 +57,11 @@ export const dashboardPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.post('/api/logs/cleanup', async () => {
     const deleted = await cleanupOldLogs(config.LOG_RETENTION_DAYS);
     return { deleted, retentionDays: config.LOG_RETENTION_DAYS };
+  });
+
+  fastify.post('/api/logs/cleanup/pending', async () => {
+    const deleted = await cleanupPendingLogs();
+    return { deleted };
   });
 
   // Register a group migration (old group ID → new supergroup ID)

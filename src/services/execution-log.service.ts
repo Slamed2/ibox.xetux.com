@@ -198,3 +198,13 @@ export async function cleanupOldLogs(retentionDays: number): Promise<number> {
   }
   return deleted;
 }
+
+export async function cleanupPendingLogs(): Promise<number> {
+  const result = await db.delete(executionLogs)
+    .where(eq(executionLogs.status, 'pending'))
+    .returning({ id: executionLogs.id });
+
+  const deleted = result.length;
+  logger.info({ deleted }, 'Pending execution logs cleaned up');
+  return deleted;
+}

@@ -201,16 +201,21 @@ bot.on('edited_message:text', async (ctx) => {
       metadata: { username: ctx.from?.username ?? null, chatType: ctx.chat?.type },
     },
     async () => {
-      const conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
-      if (!conversationId) return { action: 'no_conversation' };
+      try {
+        const conversationId = await chatwootService.findConversationByTelegramUserId(lookupId);
+        if (!conversationId) return { action: 'no_conversation' };
 
-      const chatwootMsg = await chatwootService.findMessageBySourceId(conversationId, String(editedMsg.message_id));
-      if (chatwootMsg) {
-        await chatwootService.updateMessage(conversationId, chatwootMsg.id, editedMsg.text ?? '');
-        return { action: 'message_updated', chatwootMessageId: chatwootMsg.id };
+        const chatwootMsg = await chatwootService.findMessageBySourceId(conversationId, String(editedMsg.message_id));
+        if (chatwootMsg) {
+          await chatwootService.updateMessage(conversationId, chatwootMsg.id, editedMsg.text ?? '');
+          return { action: 'message_updated', chatwootMessageId: chatwootMsg.id };
+        }
+
+        return { action: 'message_not_found' };
+      } catch (err) {
+        logger.warn({ err: (err as Error).message, userId, messageId: editedMsg.message_id }, 'Failed to sync edited message to Chatwoot');
+        return { action: 'sync_failed', error: (err as Error).message };
       }
-
-      return { action: 'message_not_found' };
     },
   );
 });
