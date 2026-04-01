@@ -87,10 +87,17 @@ export async function queryLogs(filters: LogFilters) {
     const term = `%${filters.search}%`;
     conditions.push(
       or(
+        // Full JSON text search
         sql`${executionLogs.inputData}::text ILIKE ${term}`,
         sql`${executionLogs.outputData}::text ILIKE ${term}`,
         ilike(executionLogs.eventType, term),
         sql`${executionLogs.metadata}::text ILIKE ${term}`,
+        // Specific message content paths (optimizable with GIN indexes)
+        sql`${executionLogs.inputData}->>'content' ILIKE ${term}`,
+        sql`${executionLogs.inputData}->'message'->>'content' ILIKE ${term}`,
+        sql`${executionLogs.inputData}->>'text' ILIKE ${term}`,
+        // Error message column
+        ilike(executionLogs.errorMessage, term),
       )!,
     );
   }

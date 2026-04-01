@@ -220,16 +220,17 @@ bot.on('edited_message:text', async (ctx) => {
   );
 });
 
-// Non-text messages — log only
+// All messages — log with text content when available
 bot.on('message', async (ctx) => {
+  const text = ctx.message.text ?? ctx.message.caption ?? null;
   await withExecutionLog(
     {
       eventType: 'telegram:message',
       source: 'telegram_webhook',
       direction: 'inbound',
-      inputData: { chatId: ctx.chat.id, from: ctx.from, messageId: ctx.message.message_id },
+      inputData: { chatId: ctx.chat.id, from: ctx.from, messageId: ctx.message.message_id, text },
       contactId: String(ctx.from?.id),
-      metadata: { chatType: ctx.chat.type, contentType: 'non_text' },
+      metadata: { chatType: ctx.chat.type, contentType: text ? 'text' : 'non_text' },
     },
     async () => {
       return { messageId: ctx.message.message_id };
