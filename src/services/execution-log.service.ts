@@ -208,3 +208,13 @@ export async function cleanupPendingLogs(): Promise<number> {
   logger.info({ deleted }, 'Pending execution logs cleaned up');
   return deleted;
 }
+
+export async function cleanupByStatus(status: string): Promise<number> {
+  const result = await db.delete(executionLogs)
+    .where(eq(executionLogs.status, status))
+    .returning({ id: executionLogs.id });
+
+  const deleted = result.length;
+  logger.info({ deleted, status }, 'Execution logs cleaned up by status');
+  return deleted;
+}
