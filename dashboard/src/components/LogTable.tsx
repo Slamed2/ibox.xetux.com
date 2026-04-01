@@ -55,6 +55,28 @@ const columns = [
       <span className="font-mono text-xs">{info.getValue() ?? '-'}</span>
     ),
   }),
+  columnHelper.display({
+    id: 'message',
+    header: 'Message',
+    cell: (info) => {
+      const row = info.row.original;
+      const input = row.inputData as Record<string, any> | null;
+      // Extract message text from various payload shapes
+      const text = input?.text
+        ?? input?.content
+        ?? input?.message?.content
+        ?? input?.message?.text
+        ?? row.errorMessage
+        ?? null;
+      if (!text) return <span className="text-gray-300">-</span>;
+      const display = typeof text === 'string' && text.length > 60 ? text.slice(0, 60) + '…' : text;
+      return (
+        <span className="text-xs text-gray-700 truncate block max-w-[250px]" title={typeof text === 'string' ? text : ''}>
+          {display}
+        </span>
+      );
+    },
+  }),
 ];
 
 interface LogTableProps {
