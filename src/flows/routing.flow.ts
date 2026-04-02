@@ -71,6 +71,13 @@ export async function handleMessageCreated(payload: ChatwootWebhookPayload) {
   const xetuxId = contact?.custom_attributes?.xetux_id as string | undefined;
   const telegramUserId = contact?.additional_attributes?.social_telegram_user_id as number | undefined;
 
+  // Skip all automations for conversations labeled "interno"
+  const labels = conversation.labels ?? [];
+  if (labels.includes('interno')) {
+    logger.debug({ conversationId }, 'Routing: skipping — interno conversation');
+    return;
+  }
+
   // --- Team selection from callback button ---
   const teamSelection = extractTeamSelection(content);
   if (teamSelection) {
