@@ -151,8 +151,7 @@ export const chatwootPlugin: FastifyPluginAsync = async (fastify) => {
                 return { action: 'greeting_flow' };
 
               case 'message_created':
-                await handleMessageCreated(payload);
-                return { action: 'routing_flow' };
+                return await handleMessageCreated(payload) ?? { action: 'routing_flow' };
 
               case 'conversation_status_changed':
                 await handleConversationResolved(payload);

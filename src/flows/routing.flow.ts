@@ -159,34 +159,21 @@ export async function handleMessageCreated(payload: ChatwootWebhookPayload) {
   }
 
   // --- Keyword routing (existing) ---
-  await withExecutionLog(
-    {
-      eventType: 'chatwoot:message_created',
-      source: 'chatwoot_webhook',
-      direction: 'inbound',
-      inputData: payload,
-      conversationId: String(conversationId),
-      contactId: String(contactId ?? ''),
-      metadata: { messageType: message.message_type, senderType: message.sender?.type ?? null },
-    },
-    async () => {
-      if (conversation.team_id) {
-        return { action: 'skipped', reason: 'team_already_assigned' };
-      }
+  if (conversation.team_id) {
+    return { action: 'skipped', reason: 'team_already_assigned' };
+  }
 
-      const lowerContent = content.toLowerCase();
-      for (const route of KEYWORD_ROUTES) {
-        if (route.keywords.some(kw => lowerContent.includes(kw))) {
-          await chatwootService.assignConversation(conversationId, { team_id: route.teamId });
-          await chatwootService.addLabels(conversationId, [route.label]);
-          logger.info({ conversationId, route: route.label }, 'Routed by keyword');
-          return { action: 'routed', teamId: route.teamId, label: route.label };
-        }
-      }
+  const lowerContent = content.toLowerCase();
+  for (const route of KEYWORD_ROUTES) {
+    if (route.keywords.some(kw => lowerContent.includes(kw))) {
+      await chatwootService.assignConversation(conversationId, { team_id: route.teamId });
+      await chatwootService.addLabels(conversationId, [route.label]);
+      logger.info({ conversationId, route: route.label }, 'Routed by keyword');
+      return { action: 'routed', teamId: route.teamId, label: route.label };
+    }
+  }
 
-      return { action: 'no_match', content };
-    },
-  );
+  return { action: 'no_match', content };
 }
 
 // ─── Team selection (replaces grammY callback handler logic) ────────────────
