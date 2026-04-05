@@ -10,8 +10,24 @@ export async function handleConversationUpdated(payload: ChatwootWebhookPayload)
   const conversation = payload.conversation;
   if (!conversation) return;
 
+  // Detect "interno" label → persist flag on contact
+  const labels = conversation.labels ?? [];
+  const contactId = conversation.contact?.id;
+  if (labels.includes('interno') && contactId) {
+    const currentAttrs = conversation.contact?.custom_attributes ?? {};
+    if (!currentAttrs.interno) {
+      await chatwootService.updateContact(contactId, {
+        custom_attributes: { ...currentAttrs, interno: true },
+      });
+      logger.info({ contactId, conversationId: conversation.id }, 'Marked contact as interno');
+    }
+  }
+
   const changedAttrs = payload.changed_attributes as unknown as Array<Record<string, { previous_value: unknown; current_value: unknown }>> | undefined;
   if (!changedAttrs || !Array.isArray(changedAttrs)) return;
+
+  // Skip assignment notifications for interno conversations
+  if (labels.includes('interno')) return;
 
   const telegramUserId = conversation.contact?.additional_attributes?.social_telegram_user_id as number | undefined;
 

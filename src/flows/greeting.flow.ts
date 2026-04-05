@@ -39,8 +39,16 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
   if (!conversation) return;
 
   const contact = conversation.contact;
+  const isInterno = contact?.custom_attributes?.interno === true;
   const xetuxId = contact?.custom_attributes?.xetux_id as string | undefined;
   const telegramUserId = contact?.additional_attributes?.social_telegram_user_id as number | undefined;
+
+  // Internal contacts: auto-label and skip all automations
+  if (isInterno) {
+    logger.info({ conversationId: conversation.id, contactId: contact?.id }, 'Greeting flow: skipping — interno contact');
+    await chatwootService.addLabels(conversation.id, ['interno']);
+    return;
+  }
 
   logger.info({ telegramUserId, xetuxId, conversationId: conversation.id }, 'Greeting flow: conversation created');
 

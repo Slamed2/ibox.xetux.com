@@ -13,6 +13,10 @@ export async function handleConversationResolved(payload: ChatwootWebhookPayload
   // Only act on resolution
   if (conversation.status !== 'resolved') return;
 
+  // Skip farewell and survey for interno conversations
+  const labels = conversation.labels ?? [];
+  if (labels.includes('interno')) return;
+
   await withExecutionLog(
     {
       eventType: 'chatwoot:conversation_resolved',
