@@ -3,6 +3,7 @@ import { withExecutionLog } from '../services/execution-log.service.js';
 import { bot, wasBotAssignment, markBotAssignment } from '../services/telegram.service.js';
 import { TEAMS, TEAM_LABELS, TEAM_NAMES } from '../services/department-menu.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
+import { CONSULTORIA_VE_GREETING, DEPARTMENT_SWITCH_HINT } from '../constants/messages.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 
@@ -68,7 +69,7 @@ async function handleTeamChange(conversation: any, telegramUserId: number | unde
     async () => {
       const teamName = TEAM_NAMES[currentTeamId] ?? `Equipo #${currentTeamId}`;
       const message = currentTeamId === TEAMS.CONSULTORIA_VE
-        ? '¡Buen día! ☀️ Esperamos que se encuentre muy bien. 😊\n\nLe saluda el Departamento de Consultoría Venezuela Xetux. ¿En qué podemos ayudarle el día de hoy?'
+        ? CONSULTORIA_VE_GREETING
         : `🔄 Conversación #${conversation.id} transferida a *${teamName}*.\n\nUn agente te atenderá pronto.`;
       const teamLabelTag = TEAM_LABELS[currentTeamId];
 
@@ -80,7 +81,7 @@ async function handleTeamChange(conversation: any, telegramUserId: number | unde
 
       // Sync to Chatwoot (needs telegramMessageId)
       const chatwootContent = currentTeamId === TEAMS.CONSULTORIA_VE
-        ? '¡Buen día! ☀️ Esperamos que se encuentre muy bien. 😊\n\nLe saluda el Departamento de Consultoría Venezuela Xetux. ¿En qué podemos ayudarle el día de hoy?'
+        ? CONSULTORIA_VE_GREETING
         : `🔄 Conversación #${conversation.id} transferida a ${teamName}. Un agente te atenderá pronto.`;
       await chatwootService.sendMessage(conversation.id, {
         content: chatwootContent,
@@ -90,7 +91,7 @@ async function handleTeamChange(conversation: any, telegramUserId: number | unde
 
       // Send department switch hint as separate message for Consultoría VE
       if (currentTeamId === TEAMS.CONSULTORIA_VE && telegramUserId) {
-        const hint = 'Si deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.';
+        const hint = DEPARTMENT_SWITCH_HINT;
         const hintMsg = await bot.api.sendMessage(telegramUserId, hint);
         await chatwootService.sendMessage(conversation.id, {
           content: hint,
@@ -117,7 +118,14 @@ async function handleAssigneeChange(conversation: any, telegramUserId: number | 
     },
     async () => {
       // Skip assignee notification for Consultoría VE — they have their own greeting
-      if (Number(conversation.team_id) === TEAMS.CONSULTORIA_VE) {
+      // conversation.team_id may be missing from the webhook payload, so fetch if needed
+      let convTeamId = conversation.team_id != null ? Number(conversation.team_id) : null;
+      if (convTeamId == null) {
+        const conv = await chatwootService.getConversation(conversation.id);
+        convTeamId = conv?.team_id != null ? Number(conv.team_id) : null;
+      }
+      logger.debug({ conversationId: conversation.id, convTeamId, rawTeamId: conversation.team_id }, 'Assignee change: team_id check');
+      if (convTeamId === TEAMS.CONSULTORIA_VE) {
         return { action: 'assignee_skipped_consultoria_ve' };
       }
 
@@ -126,8 +134,7 @@ async function handleAssigneeChange(conversation: any, telegramUserId: number | 
       const agentName = metaAssignee?.name
         ?? (await chatwootService.getAgent(assigneeId))?.name
         ?? 'Un agente';
-      const teamId = conversation.team_id as number | undefined;
-      const teamName = teamId ? (TEAM_NAMES[teamId] ?? '') : '';
+      const teamName = convTeamId ? (TEAM_NAMES[convTeamId] ?? '') : '';
       const areaText = teamName ? ` del área de *${teamName}*` : '';
 
       const message = `👋 Mi nombre es *${agentName}*${areaText} de ${config.COMPANY_NAME} y estaré encantado de atenderte.`;

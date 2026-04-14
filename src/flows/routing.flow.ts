@@ -20,9 +20,7 @@ import { TtlMap } from '../utils/ttl-map.js';
 // TODO: Configurar keywords y sus team_ids correspondientes
 const KEYWORD_ROUTES: Array<{ keywords: string[]; teamId: number; label: string }> = [];
 
-const CONSULTORIA_VE_GREETING = '¡Buen día! ☀️ Esperamos que se encuentre muy bien. 😊\n\nLe saluda el Departamento de Consultoría Venezuela Xetux. ¿En qué podemos ayudarle el día de hoy?';
-
-const DEPARTMENT_SWITCH_HINT = 'Si deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.';
+import { CONSULTORIA_VE_GREETING, DEPARTMENT_SWITCH_HINT } from '../constants/messages.js';
 
 function teamConfirmText(teamId: number, teamLabel: string, conversationId: number): string {
   if (teamId === TEAMS.CONSULTORIA_VE) return CONSULTORIA_VE_GREETING;
