@@ -79,11 +79,25 @@ async function handleTeamChange(conversation: any, telegramUserId: number | unde
       ]);
 
       // Sync to Chatwoot (needs telegramMessageId)
+      const chatwootContent = currentTeamId === TEAMS.CONSULTORIA_VE
+        ? '¡Buen día! ☀️ Esperamos que se encuentre muy bien. 😊\n\nLe saluda el Departamento de Consultoría Venezuela Xetux. ¿En qué podemos ayudarle el día de hoy?'
+        : `🔄 Conversación #${conversation.id} transferida a ${teamName}. Un agente te atenderá pronto.`;
       await chatwootService.sendMessage(conversation.id, {
-        content: `🔄 Conversación #${conversation.id} transferida a ${teamName}. Un agente te atenderá pronto.`,
+        content: chatwootContent,
         message_type: 'outgoing',
         ...(sentMsg ? { source_id: String(sentMsg.message_id) } : {}),
       });
+
+      // Send department switch hint as separate message for Consultoría VE
+      if (currentTeamId === TEAMS.CONSULTORIA_VE && telegramUserId) {
+        const hint = 'Si deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.';
+        const hintMsg = await bot.api.sendMessage(telegramUserId, hint);
+        await chatwootService.sendMessage(conversation.id, {
+          content: hint,
+          message_type: 'outgoing',
+          source_id: String(hintMsg.message_id),
+        });
+      }
 
       return { action: 'team_notified', currentTeamId, teamName };
     },
@@ -102,6 +116,11 @@ async function handleAssigneeChange(conversation: any, telegramUserId: number | 
       metadata: { assigneeId },
     },
     async () => {
+      // Skip assignee notification for Consultoría VE — they have their own greeting
+      if (conversation.team_id === TEAMS.CONSULTORIA_VE) {
+        return { action: 'assignee_skipped_consultoria_ve' };
+      }
+
       // Get agent name: try from payload meta first, then API
       const metaAssignee = (payload as any).meta?.assignee;
       const agentName = metaAssignee?.name
