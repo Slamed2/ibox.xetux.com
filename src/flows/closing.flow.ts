@@ -34,7 +34,7 @@ export async function handleConversationResolved(payload: ChatwootWebhookPayload
         const conv = await chatwootService.getConversation(conversation.id);
         teamId = conv?.team_id != null ? Number(conv.team_id) : null;
       }
-      logger.debug({ conversationId: conversation.id, teamId, rawTeamId: conversation.team_id }, 'Closing: team_id check');
+      logger.info({ conversationId: conversation.id, teamId, rawTeamId: conversation.team_id, rawType: typeof conversation.team_id }, 'Closing: team_id check');
       const isConsultoriaVE = teamId === TEAMS.CONSULTORIA_VE;
       const farewellMessage = isConsultoriaVE
         ? '¡Hola Estimad@! 👋\nTu solicitud ha sido procesada con éxito. ✅ Estamos atentos a cualquier duda o caso pendiente que puedas tener para ser atendido por nuestro departamento. ¡Siempre listos para ayudarte! 😉 Te deseamos un feliz día. ☀️\n-------\nTu opinión es muy importante para nosotros, por esta razón nos gustaría que nos apoyaras llenando esta breve encuesta: 📝\nhttps://forms.gle/8Tv3jKP5WTziFPqD8\n¡Gracias por comunicarte con @ConsultoriaXetux! 😁'
