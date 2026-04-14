@@ -34,8 +34,8 @@ export async function handleConversationUpdated(payload: ChatwootWebhookPayload)
   // Handle team change
   const teamChange = changedAttrs.find((attr) => 'team_id' in attr);
   if (teamChange) {
-    const previousTeamId = teamChange.team_id.previous_value as number | null;
-    const currentTeamId = teamChange.team_id.current_value as number | null;
+    const previousTeamId = teamChange.team_id.previous_value != null ? Number(teamChange.team_id.previous_value) : null;
+    const currentTeamId = teamChange.team_id.current_value != null ? Number(teamChange.team_id.current_value) : null;
 
     if (previousTeamId !== currentTeamId && !wasBotAssignment(conversation.id) && currentTeamId) {
       await handleTeamChange(conversation, telegramUserId, currentTeamId, payload);
