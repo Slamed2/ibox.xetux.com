@@ -1,7 +1,7 @@
 import { chatwootService } from '../services/chatwoot.service.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
 import { bot, wasBotAssignment, markBotAssignment } from '../services/telegram.service.js';
-import { TEAM_LABELS, TEAM_NAMES } from '../services/department-menu.js';
+import { TEAMS, TEAM_LABELS, TEAM_NAMES } from '../services/department-menu.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
@@ -67,7 +67,9 @@ async function handleTeamChange(conversation: any, telegramUserId: number | unde
     },
     async () => {
       const teamName = TEAM_NAMES[currentTeamId] ?? `Equipo #${currentTeamId}`;
-      const message = `🔄 Conversación #${conversation.id} transferida a *${teamName}*.\n\nUn agente te atenderá pronto.`;
+      const message = currentTeamId === TEAMS.CONSULTORIA_VE
+        ? '¡Buen día! ☀️ Esperamos que se encuentre muy bien. 😊\n\nLe saluda el Departamento de Consultoría Venezuela Xetux. ¿En qué podemos ayudarle el día de hoy?'
+        : `🔄 Conversación #${conversation.id} transferida a *${teamName}*.\n\nUn agente te atenderá pronto.`;
       const teamLabelTag = TEAM_LABELS[currentTeamId];
 
       // Telegram send + label replace (parallel — independent of each other)
