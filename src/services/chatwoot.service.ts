@@ -220,6 +220,16 @@ class ChatwootService {
     }
   }
 
+  async getContact(contactId: number) {
+    try {
+      const { data } = await this.client.get(`/contacts/${contactId}`);
+      return data;
+    } catch {
+      logger.warn({ contactId }, 'Could not fetch contact');
+      return null;
+    }
+  }
+
   async updateContact(contactId: number, payload: ChatwootUpdateContactPayload) {
     logger.debug({ contactId, ...payload }, 'Updating contact');
     const { data } = await this.client.put(`/contacts/${contactId}`, payload);
