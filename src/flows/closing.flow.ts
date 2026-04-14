@@ -28,11 +28,9 @@ export async function handleConversationResolved(payload: ChatwootWebhookPayload
       contactId: String(conversation.contact?.id),
     },
     async () => {
-      // Detect Consultoría VE by team_id (may come as team_id or team.id from webhook)
-      const rawTeamId = conversation.team_id ?? (conversation as any).team?.id;
-      const teamId = rawTeamId != null ? Number(rawTeamId) : null;
-      const isConsultoriaVE = teamId === TEAMS.CONSULTORIA_VE;
-      logger.info({ conversationId: conversation.id, rawTeamId, teamId, teamObj: (conversation as any).team, isConsultoriaVE }, 'Closing: team_id check');
+      // Detect Consultoría VE by team_id (normalized in plugin from meta.team.id)
+      const isConsultoriaVE = Number(conversation.team_id) === TEAMS.CONSULTORIA_VE;
+      logger.info({ conversationId: conversation.id, teamId: conversation.team_id, isConsultoriaVE }, 'Closing: team_id check');
       const farewellMessage = isConsultoriaVE
         ? '¡Hola Estimad@! 👋\nTu solicitud ha sido procesada con éxito. ✅ Estamos atentos a cualquier duda o caso pendiente que puedas tener para ser atendido por nuestro departamento. ¡Siempre listos para ayudarte! 😉 Te deseamos un feliz día. ☀️\n-------\nTu opinión es muy importante para nosotros, por esta razón nos gustaría que nos apoyaras llenando esta breve encuesta: 📝\nhttps://forms.gle/8Tv3jKP5WTziFPqD8\n¡Gracias por comunicarte con @ConsultoriaXetux! 😁'
         : `Su conversación #${conversation.id} ha sido procesada y solucionada. Estamos atentos a cualquier duda o caso pendiente que pueda tener para ser atendido por nuestro departamento.\n\nSu opinión es importante para nosotros, por esta razón nos gustaría que nos apoyara llenando esta breve encuesta ${config.SURVEY_FORM_URL}\n\nGracias por comunicarse con ${config.COMPANY_NAME}.`;

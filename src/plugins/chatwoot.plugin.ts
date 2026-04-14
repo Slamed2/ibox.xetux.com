@@ -63,7 +63,7 @@ function normalizePayload(raw: Record<string, unknown>): ChatwootWebhookPayload 
     inbox_id: raw.inbox_id as number,
     status: raw.status as string,
     assignee_id: raw.assignee_id as number | undefined,
-    team_id: raw.team_id as number | undefined,
+    team_id: (raw.team_id ?? (raw.meta as any)?.team?.id) as number | undefined,
     labels: raw.labels as string[] ?? [],
     custom_attributes: raw.custom_attributes as Record<string, unknown> ?? {},
     additional_attributes: raw.additional_attributes as Record<string, unknown> ?? {},
