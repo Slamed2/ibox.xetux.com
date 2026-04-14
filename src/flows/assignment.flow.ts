@@ -117,7 +117,7 @@ async function handleAssigneeChange(conversation: any, telegramUserId: number | 
     },
     async () => {
       // Skip assignee notification for Consultoría VE — they have their own greeting
-      if (conversation.team_id === TEAMS.CONSULTORIA_VE) {
+      if (Number(conversation.team_id) === TEAMS.CONSULTORIA_VE) {
         return { action: 'assignee_skipped_consultoria_ve' };
       }
 
