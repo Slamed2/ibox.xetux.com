@@ -342,13 +342,8 @@ async function handleDepartmentCommand(
         return { action: 'department_disabled', command };
       }
 
-      // Resolve team from xetux_id country (fetch from API if missing in webhook)
-      let effectiveXetuxId = xetuxId;
-      if (!effectiveXetuxId && contactId) {
-        const freshContact = await chatwootService.getContact(contactId);
-        effectiveXetuxId = freshContact?.custom_attributes?.xetux_id as string | undefined;
-      }
-      const resolved = resolveTeamFromCommand(command, effectiveXetuxId);
+      // Resolve team from xetux_id country
+      const resolved = resolveTeamFromCommand(command, xetuxId);
       if (resolved) {
         markBotAssignment(conversationId);
         conversationNudgeState.delete(conversationId);
