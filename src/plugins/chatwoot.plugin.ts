@@ -47,6 +47,11 @@ function normalizePayload(raw: Record<string, unknown>): ChatwootWebhookPayload 
       conv.contact = conv.meta.sender;
     }
 
+    // Ensure team_id is set (webhook may send team as object instead of team_id)
+    if (conv.team_id == null && conv.team?.id != null) {
+      conv.team_id = conv.team.id;
+    }
+
     return payload as ChatwootWebhookPayload;
   }
 
