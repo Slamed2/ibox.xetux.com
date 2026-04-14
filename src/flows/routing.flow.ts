@@ -20,6 +20,18 @@ import { TtlMap } from '../utils/ttl-map.js';
 // TODO: Configurar keywords y sus team_ids correspondientes
 const KEYWORD_ROUTES: Array<{ keywords: string[]; teamId: number; label: string }> = [];
 
+const CONSULTORIA_VE_GREETING = '¡Buen día! ☀️ Esperamos que se encuentre muy bien. 😊\n\nLe saluda el Departamento de Consultoría Venezuela Xetux. ¿En qué podemos ayudarle el día de hoy?';
+
+function teamConfirmText(teamId: number, teamLabel: string, conversationId: number): string {
+  if (teamId === TEAMS.CONSULTORIA_VE) return CONSULTORIA_VE_GREETING;
+  return `✅ Conversación #${conversationId} asignada a *${teamLabel}*.\n\nUn agente te atenderá pronto.\n\nSi deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.`;
+}
+
+function teamConfirmTextPlain(teamId: number, teamLabel: string, conversationId: number): string {
+  if (teamId === TEAMS.CONSULTORIA_VE) return CONSULTORIA_VE_GREETING;
+  return `✅ Conversación #${conversationId} asignada a ${teamLabel}.\n\nUn agente te atenderá pronto.\n\nSi deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.`;
+}
+
 /**
  * Track nudge state per conversation to send exactly ONE reminder
  * when a user ignores the login button or department menu.
@@ -207,7 +219,8 @@ async function handleTeamSelection(
       conversationNudgeState.delete(conversationId);
 
       const teamLabelTag = TEAM_LABELS[selection.teamId];
-      const confirmText = `✅ Conversación #${conversationId} asignada a *${selection.teamLabel}*.\n\nUn agente te atenderá pronto.\n\nSi deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.`;
+      const confirmText = teamConfirmText(selection.teamId, selection.teamLabel, conversationId);
+      const confirmTextPlain = teamConfirmTextPlain(selection.teamId, selection.teamLabel, conversationId);
 
       // Assign + label + telegram send (parallel — all independent)
       const [, , sentMsg] = await Promise.all([
@@ -218,7 +231,7 @@ async function handleTeamSelection(
 
       // Sync confirmation to Chatwoot (needs telegramMessageId)
       await chatwootService.sendMessage(conversationId, {
-        content: `✅ Conversación #${conversationId} asignada a ${selection.teamLabel}.\n\nUn agente te atenderá pronto.\n\nSi deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.`,
+        content: confirmTextPlain,
         message_type: 'outgoing',
         ...(sentMsg ? { source_id: String(sentMsg.message_id) } : {}),
       });
@@ -324,7 +337,8 @@ async function handleDepartmentCommand(
         conversationNudgeState.delete(conversationId);
 
         const teamLabelTag = TEAM_LABELS[resolved.teamId];
-        const confirmText = `✅ Conversación #${conversationId} asignada a *${resolved.label}*.\n\nUn agente te atenderá pronto.\n\nSi deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.`;
+        const confirmText = teamConfirmText(resolved.teamId, resolved.label, conversationId);
+        const confirmTextPlain = teamConfirmTextPlain(resolved.teamId, resolved.label, conversationId);
 
         // Assign + label + telegram send (parallel — all independent)
         const [, , sentMsg] = await Promise.all([
@@ -335,7 +349,7 @@ async function handleDepartmentCommand(
 
         // Sync to Chatwoot (needs telegramMessageId)
         await chatwootService.sendMessage(conversationId, {
-          content: `✅ Conversación #${conversationId} asignada a ${resolved.label}.\n\nUn agente te atenderá pronto.\n\nSi deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.`,
+          content: confirmTextPlain,
           message_type: 'outgoing',
           source_id: String(sentMsg.message_id),
         });
