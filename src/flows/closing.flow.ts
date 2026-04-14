@@ -28,14 +28,10 @@ export async function handleConversationResolved(payload: ChatwootWebhookPayload
       contactId: String(conversation.contact?.id),
     },
     async () => {
-      // team_id may be missing from webhook payload — fetch from API if needed
-      let teamId = conversation.team_id != null ? Number(conversation.team_id) : null;
-      if (teamId == null || isNaN(teamId)) {
-        const conv = await chatwootService.getConversation(conversation.id);
-        teamId = conv?.team_id != null ? Number(conv.team_id) : null;
-      }
-      logger.info({ conversationId: conversation.id, teamId, rawTeamId: conversation.team_id, rawType: typeof conversation.team_id }, 'Closing: team_id check');
-      const isConsultoriaVE = teamId === TEAMS.CONSULTORIA_VE;
+      // Check team by label (most reliable — team_id may be reset to 0 on resolve)
+      const convLabels = conversation.labels ?? [];
+      const isConsultoriaVE = convLabels.includes('consultoria-venezuela');
+      logger.info({ conversationId: conversation.id, labels: convLabels, webhookTeamId: conversation.team_id, isConsultoriaVE }, 'Closing: team check');
       const farewellMessage = isConsultoriaVE
         ? '¡Hola Estimad@! 👋\nTu solicitud ha sido procesada con éxito. ✅ Estamos atentos a cualquier duda o caso pendiente que puedas tener para ser atendido por nuestro departamento. ¡Siempre listos para ayudarte! 😉 Te deseamos un feliz día. ☀️\n-------\nTu opinión es muy importante para nosotros, por esta razón nos gustaría que nos apoyaras llenando esta breve encuesta: 📝\nhttps://forms.gle/8Tv3jKP5WTziFPqD8\n¡Gracias por comunicarte con @ConsultoriaXetux! 😁'
         : `Su conversación #${conversation.id} ha sido procesada y solucionada. Estamos atentos a cualquier duda o caso pendiente que pueda tener para ser atendido por nuestro departamento.\n\nSu opinión es importante para nosotros, por esta razón nos gustaría que nos apoyara llenando esta breve encuesta ${config.SURVEY_FORM_URL}\n\nGracias por comunicarse con ${config.COMPANY_NAME}.`;
