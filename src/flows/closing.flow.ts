@@ -28,7 +28,14 @@ export async function handleConversationResolved(payload: ChatwootWebhookPayload
       contactId: String(conversation.contact?.id),
     },
     async () => {
-      const isConsultoriaVE = Number(conversation.team_id) === TEAMS.CONSULTORIA_VE;
+      // team_id may be missing from webhook payload — fetch from API if needed
+      let teamId = conversation.team_id != null ? Number(conversation.team_id) : null;
+      if (teamId == null || isNaN(teamId)) {
+        const conv = await chatwootService.getConversation(conversation.id);
+        teamId = conv?.team_id != null ? Number(conv.team_id) : null;
+      }
+      logger.debug({ conversationId: conversation.id, teamId, rawTeamId: conversation.team_id }, 'Closing: team_id check');
+      const isConsultoriaVE = teamId === TEAMS.CONSULTORIA_VE;
       const farewellMessage = isConsultoriaVE
         ? '¡Hola Estimad@! 👋\nTu solicitud ha sido procesada con éxito. ✅ Estamos atentos a cualquier duda o caso pendiente que puedas tener para ser atendido por nuestro departamento. ¡Siempre listos para ayudarte! 😉 Te deseamos un feliz día. ☀️\n-------\nTu opinión es muy importante para nosotros, por esta razón nos gustaría que nos apoyaras llenando esta breve encuesta: 📝\nhttps://forms.gle/8Tv3jKP5WTziFPqD8\n¡Gracias por comunicarte con @ConsultoriaXetux! 😁'
         : `Su conversación #${conversation.id} ha sido procesada y solucionada. Estamos atentos a cualquier duda o caso pendiente que pueda tener para ser atendido por nuestro departamento.\n\nSu opinión es importante para nosotros, por esta razón nos gustaría que nos apoyara llenando esta breve encuesta ${config.SURVEY_FORM_URL}\n\nGracias por comunicarse con ${config.COMPANY_NAME}.`;
