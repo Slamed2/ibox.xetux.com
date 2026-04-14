@@ -22,14 +22,16 @@ const KEYWORD_ROUTES: Array<{ keywords: string[]; teamId: number; label: string 
 
 const CONSULTORIA_VE_GREETING = '¡Buen día! ☀️ Esperamos que se encuentre muy bien. 😊\n\nLe saluda el Departamento de Consultoría Venezuela Xetux. ¿En qué podemos ayudarle el día de hoy?';
 
+const DEPARTMENT_SWITCH_HINT = 'Si deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.';
+
 function teamConfirmText(teamId: number, teamLabel: string, conversationId: number): string {
   if (teamId === TEAMS.CONSULTORIA_VE) return CONSULTORIA_VE_GREETING;
-  return `✅ Conversación #${conversationId} asignada a *${teamLabel}*.\n\nUn agente te atenderá pronto.\n\nSi deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.`;
+  return `✅ Conversación #${conversationId} asignada a *${teamLabel}*.\n\nUn agente te atenderá pronto.\n\n${DEPARTMENT_SWITCH_HINT}`;
 }
 
 function teamConfirmTextPlain(teamId: number, teamLabel: string, conversationId: number): string {
   if (teamId === TEAMS.CONSULTORIA_VE) return CONSULTORIA_VE_GREETING;
-  return `✅ Conversación #${conversationId} asignada a ${teamLabel}.\n\nUn agente te atenderá pronto.\n\nSi deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.`;
+  return `✅ Conversación #${conversationId} asignada a ${teamLabel}.\n\nUn agente te atenderá pronto.\n\n${DEPARTMENT_SWITCH_HINT}`;
 }
 
 /**
@@ -236,6 +238,16 @@ async function handleTeamSelection(
         ...(sentMsg ? { source_id: String(sentMsg.message_id) } : {}),
       });
 
+      // Send department switch hint as separate message for Consultoría VE
+      if (selection.teamId === TEAMS.CONSULTORIA_VE && telegramUserId) {
+        const hintMsg = await bot.api.sendMessage(telegramUserId, DEPARTMENT_SWITCH_HINT);
+        await chatwootService.sendMessage(conversationId, {
+          content: DEPARTMENT_SWITCH_HINT,
+          message_type: 'outgoing',
+          source_id: String(hintMsg.message_id),
+        });
+      }
+
       return { action: 'team_assigned', ...selection, conversationId };
     },
   );
@@ -353,6 +365,16 @@ async function handleDepartmentCommand(
           message_type: 'outgoing',
           source_id: String(sentMsg.message_id),
         });
+
+        // Send department switch hint as separate message for Consultoría VE
+        if (resolved.teamId === TEAMS.CONSULTORIA_VE) {
+          const hintMsg = await bot.api.sendMessage(telegramUserId, DEPARTMENT_SWITCH_HINT);
+          await chatwootService.sendMessage(conversationId, {
+            content: DEPARTMENT_SWITCH_HINT,
+            message_type: 'outgoing',
+            source_id: String(hintMsg.message_id),
+          });
+        }
 
         return { action: 'team_assigned', teamId: resolved.teamId, label: resolved.label };
       }
