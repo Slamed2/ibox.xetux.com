@@ -20,7 +20,8 @@ import { TtlMap } from '../utils/ttl-map.js';
 // TODO: Configurar keywords y sus team_ids correspondientes
 const KEYWORD_ROUTES: Array<{ keywords: string[]; teamId: number; label: string }> = [];
 
-import { CONSULTORIA_VE_GREETING, DEPARTMENT_SWITCH_HINT } from '../constants/messages.js';
+import { CONSULTORIA_VE_GREETING, CONSULTORIA_VE_OUT_OF_HOURS, DEPARTMENT_SWITCH_HINT } from '../constants/messages.js';
+import { isConsultoriaVeOpen } from '../utils/business-hours.js';
 
 function teamConfirmText(teamId: number, teamLabel: string, conversationId: number): string {
   if (teamId === TEAMS.CONSULTORIA_VE) return CONSULTORIA_VE_GREETING;
@@ -188,6 +189,31 @@ export async function handleMessageCreated(payload: ChatwootWebhookPayload) {
   return { action: 'no_match', content };
 }
 
+/**
+ * Mensajes extra que se envían tras asignar Consultoría VE:
+ * - Si está fuera de horario (hora de Venezuela), avisa que el canal está cerrado.
+ *   El chat YA quedó asignado; el aviso es solo informativo.
+ * - Siempre envía el hint para cambiar de departamento.
+ * Cada mensaje se espeja en Chatwoot con su source_id de Telegram.
+ */
+async function sendConsultoriaVePostAssign(conversationId: number, telegramUserId: number) {
+  if (!isConsultoriaVeOpen()) {
+    const closedMsg = await bot.api.sendMessage(telegramUserId, CONSULTORIA_VE_OUT_OF_HOURS);
+    await chatwootService.sendMessage(conversationId, {
+      content: CONSULTORIA_VE_OUT_OF_HOURS,
+      message_type: 'outgoing',
+      source_id: String(closedMsg.message_id),
+    });
+  }
+
+  const hintMsg = await bot.api.sendMessage(telegramUserId, DEPARTMENT_SWITCH_HINT);
+  await chatwootService.sendMessage(conversationId, {
+    content: DEPARTMENT_SWITCH_HINT,
+    message_type: 'outgoing',
+    source_id: String(hintMsg.message_id),
+  });
+}
+
 // ─── Team selection (replaces grammY callback handler logic) ────────────────
 
 async function handleTeamSelection(
@@ -236,14 +262,9 @@ async function handleTeamSelection(
         ...(sentMsg ? { source_id: String(sentMsg.message_id) } : {}),
       });
 
-      // Send department switch hint as separate message for Consultoría VE
+      // Consultoría VE: aviso fuera de horario (si aplica) + hint de cambio de departamento
       if (selection.teamId === TEAMS.CONSULTORIA_VE && telegramUserId) {
-        const hintMsg = await bot.api.sendMessage(telegramUserId, DEPARTMENT_SWITCH_HINT);
-        await chatwootService.sendMessage(conversationId, {
-          content: DEPARTMENT_SWITCH_HINT,
-          message_type: 'outgoing',
-          source_id: String(hintMsg.message_id),
-        });
+        await sendConsultoriaVePostAssign(conversationId, telegramUserId);
       }
 
       return { action: 'team_assigned', ...selection, conversationId };
@@ -364,14 +385,9 @@ async function handleDepartmentCommand(
           source_id: String(sentMsg.message_id),
         });
 
-        // Send department switch hint as separate message for Consultoría VE
+        // Consultoría VE: aviso fuera de horario (si aplica) + hint de cambio de departamento
         if (resolved.teamId === TEAMS.CONSULTORIA_VE) {
-          const hintMsg = await bot.api.sendMessage(telegramUserId, DEPARTMENT_SWITCH_HINT);
-          await chatwootService.sendMessage(conversationId, {
-            content: DEPARTMENT_SWITCH_HINT,
-            message_type: 'outgoing',
-            source_id: String(hintMsg.message_id),
-          });
+          await sendConsultoriaVePostAssign(conversationId, telegramUserId);
         }
 
         return { action: 'team_assigned', teamId: resolved.teamId, label: resolved.label };
