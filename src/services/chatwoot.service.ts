@@ -15,6 +15,21 @@ import type {
 
 const RETRIABLE_CODES = new Set(['ECONNRESET', 'ETIMEDOUT', 'ECONNABORTED', 'ERR_NETWORK']);
 
+/**
+ * Etiquetas activas: SOLO las de color #0DEFFD se aplican por el bot.
+ * El resto (equipos, países, etc.) se mantienen en Chatwoot pero el bot NO las agrega.
+ * addLabels filtra contra esta lista; cualquier otra etiqueta se ignora silenciosamente.
+ */
+const ACTIVE_LABELS = new Set<string>([
+  'interno',
+  'xetux',
+  'actualizar-version',
+  'auditorias-fiscales',
+  'capacitación-instalación',
+  'desarrollo',
+  'pendientes-consultoría',
+]);
+
 class ChatwootService {
   private client: AxiosInstance;
   private accountId: number;
@@ -127,11 +142,17 @@ class ChatwootService {
   }
 
   async addLabels(conversationId: number, labels: string[]) {
+    // Solo se aplican etiquetas activas (#0DEFFD). El resto se ignora.
+    const allowed = labels.filter(l => ACTIVE_LABELS.has(l));
+    if (allowed.length === 0) {
+      logger.debug({ conversationId, labels }, 'addLabels — ninguna etiqueta activa, se omite');
+      return null;
+    }
     return this.withLabelLock(conversationId, async () => {
-      logger.debug({ conversationId, labels }, 'Adding labels');
+      logger.debug({ conversationId, labels: allowed }, 'Adding labels');
       const conversation = await this.getConversation(conversationId);
       const currentLabels = conversation.labels ?? [];
-      const mergedLabels = [...new Set([...currentLabels, ...labels])];
+      const mergedLabels = [...new Set([...currentLabels, ...allowed])];
 
       const { data } = await this.client.post(
         `/conversations/${conversationId}/labels`,
