@@ -12,13 +12,20 @@ const AUTO_ASSIGN_FALLBACK_TEAM_ID = 2; // Soporte Venezuela
 
 /**
  * Red de seguridad: asigna a un equipo de respaldo (Soporte VE por defecto) las
- * conversaciones que quedaron "en el limbo" — abiertas, sin equipo y sin agente,
- * tras X minutos desde su creación — para que nadie quede sin atender aunque no
- * complete el registro ni elija departamento.
+ * conversaciones que quedaron "en el limbo" — para que nadie quede sin atender
+ * aunque no complete el registro ni elija departamento.
+ *
+ * Filtros (una conversación califica si cumple TODOS):
+ *   1. estado open
+ *   2. team_id vacío (sin departamento)
+ *   3. sin etiqueta `interno`
+ *   4. creada hace > AUTO_ASSIGN_TIMEOUT_MINUTES
+ *   5. inbox = CHATWOOT_INBOX_ID (canal de Telegram, configurado por env)
  *
  * Diseño liviano (bajo RAM/CPU):
+ * - Pide al endpoint de filtro SOLO las open team-less del inbox → escala con el
+ *   limbo, no con el volumen total. (1, 2 y 5 se aplican en la API; 3 y 4 en código.)
  * - Sin estado en memoria: "sin equipo" es idempotente — al asignar, deja de calificar.
- * - Pide solo conversaciones open + sin agente del inbox (pocas) y filtra en código.
  * - Silencioso para el cliente: solo asigna equipo + nota privada para los agentes.
  */
 export async function sweepUnattendedConversations(): Promise<void> {
@@ -27,7 +34,7 @@ export async function sweepUnattendedConversations(): Promise<void> {
 
   let convs: any[];
   try {
-    convs = await chatwootService.listOpenUnassignedConversations(inboxId);
+    convs = await chatwootService.listOpenTeamlessConversations(inboxId);
   } catch (err) {
     logger.error({ err, inboxId }, 'Auto-assign sweep: failed to list conversations');
     return;
@@ -36,14 +43,12 @@ export async function sweepUnattendedConversations(): Promise<void> {
   let assigned = 0;
   for (const conv of convs) {
     const labels: string[] = conv.labels ?? [];
-    const hasTeam = !!conv.meta?.team?.id;
-    const hasAgent = !!conv.meta?.assignee?.id;
     const createdAtMs = (conv.created_at ?? 0) * 1000;
 
-    // Saltar: ya tiene equipo, ya la tomó un agente, es interna, o aún es reciente
-    if (hasTeam || hasAgent) continue;
-    if (labels.includes('interno')) continue;
-    if (createdAtMs > cutoffMs) continue;
+    // (open + sin equipo + inbox ya garantizados por la consulta)
+    if (conv.meta?.team?.id) continue; // defensivo: nunca tocar una con equipo
+    if (labels.includes('interno')) continue; // etiqueta interno → conversación interna
+    if (createdAtMs > cutoffMs) continue; // creada hace < 5 min → aún se le da tiempo
 
     try {
       await assignFallbackTeam(conv);
