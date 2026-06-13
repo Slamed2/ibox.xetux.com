@@ -1,0 +1,101 @@
+import { chatwootService } from './chatwoot.service.js';
+import { withExecutionLog } from './execution-log.service.js';
+import { markBotAssignment } from './telegram.service.js';
+import { config } from '../config.js';
+import { logger } from '../utils/logger.js';
+
+// ─── Parámetros (constantes; no configurables por env) ──────────────────────
+export const AUTO_ASSIGN_ENABLED = true;
+export const AUTO_ASSIGN_SWEEP_INTERVAL_MINUTES = 2;
+const AUTO_ASSIGN_TIMEOUT_MINUTES = 5;
+const AUTO_ASSIGN_FALLBACK_TEAM_ID = 2; // Soporte Venezuela
+
+/**
+ * Red de seguridad: asigna a un equipo de respaldo (Soporte VE por defecto) las
+ * conversaciones que quedaron "en el limbo" — abiertas, sin equipo y sin agente,
+ * tras X minutos desde su creación — para que nadie quede sin atender aunque no
+ * complete el registro ni elija departamento.
+ *
+ * Diseño liviano (bajo RAM/CPU):
+ * - Sin estado en memoria: "sin equipo" es idempotente — al asignar, deja de calificar.
+ * - Pide solo conversaciones open + sin agente del inbox (pocas) y filtra en código.
+ * - Silencioso para el cliente: solo asigna equipo + nota privada para los agentes.
+ */
+export async function sweepUnattendedConversations(): Promise<void> {
+  const inboxId = config.CHATWOOT_INBOX_ID;
+  const cutoffMs = Date.now() - AUTO_ASSIGN_TIMEOUT_MINUTES * 60_000;
+
+  let convs: any[];
+  try {
+    convs = await chatwootService.listOpenUnassignedConversations(inboxId);
+  } catch (err) {
+    logger.error({ err, inboxId }, 'Auto-assign sweep: failed to list conversations');
+    return;
+  }
+
+  let assigned = 0;
+  for (const conv of convs) {
+    const labels: string[] = conv.labels ?? [];
+    const hasTeam = !!conv.meta?.team?.id;
+    const hasAgent = !!conv.meta?.assignee?.id;
+    const createdAtMs = (conv.created_at ?? 0) * 1000;
+
+    // Saltar: ya tiene equipo, ya la tomó un agente, es interna, o aún es reciente
+    if (hasTeam || hasAgent) continue;
+    if (labels.includes('interno')) continue;
+    if (createdAtMs > cutoffMs) continue;
+
+    try {
+      await assignFallbackTeam(conv);
+      assigned++;
+    } catch (err) {
+      logger.error({ err, conversationId: conv.id }, 'Auto-assign sweep: failed to assign conversation');
+    }
+  }
+
+  if (assigned > 0) {
+    logger.info(
+      { assigned, scanned: convs.length, inboxId },
+      'Auto-assign sweep: assigned unattended conversations to fallback team',
+    );
+  }
+}
+
+async function assignFallbackTeam(conv: any): Promise<void> {
+  const conversationId = conv.id as number;
+  const teamId = AUTO_ASSIGN_FALLBACK_TEAM_ID;
+  const contactId = conv.meta?.sender?.id;
+  const registered = !!conv.meta?.sender?.custom_attributes?.xetux_id;
+  const ageMin = Math.round((Date.now() - (conv.created_at ?? 0) * 1000) / 60_000);
+
+  await withExecutionLog(
+    {
+      eventType: 'flow:auto_assign',
+      source: 'scheduler',
+      direction: 'outbound',
+      inputData: { conversationId, ageMinutes: ageMin, registered },
+      conversationId: String(conversationId),
+      contactId: contactId != null ? String(contactId) : undefined,
+      metadata: { teamId, reason: registered ? 'no_department' : 'no_registration' },
+    },
+    async () => {
+      // Marcar como asignación del bot ANTES de asignar: suprime el mensaje que
+      // assignment.flow (handleTeamChange) enviaría al cliente al cambiar de equipo.
+      markBotAssignment(conversationId);
+
+      // Asignar equipo de respaldo
+      await chatwootService.assignConversation(conversationId, { team_id: teamId });
+
+      // Nota privada para los agentes (no visible para el cliente)
+      const motivo = registered ? 'no seleccionó departamento' : 'no completó el registro';
+      await chatwootService.sendMessage(conversationId, {
+        content: `🤖 Asignada automáticamente tras ${ageMin} min: el usuario ${motivo}. Atender manualmente.`,
+        message_type: 'outgoing',
+        private: true,
+      });
+
+      logger.info({ conversationId, teamId, ageMin, registered }, 'Auto-assigned unattended conversation');
+      return { action: 'auto_assigned', conversationId, teamId, registered };
+    },
+  );
+}

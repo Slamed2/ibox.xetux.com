@@ -308,6 +308,25 @@ class ChatwootService {
   }
 
   /**
+   * List OPEN conversations with no agent assignee for a given inbox.
+   * Pages through results (~25/page) with a safety cap. Used by the auto-assign sweep.
+   * Returns the raw conversation objects (incl. meta.team, meta.assignee, labels, created_at).
+   */
+  async listOpenUnassignedConversations(inboxId: number): Promise<any[]> {
+    const result: any[] = [];
+    for (let page = 1; page <= 10; page++) {
+      const { data } = await this.client.get('/conversations', {
+        params: { status: 'open', assignee_type: 'unassigned', inbox_id: inboxId, page },
+      });
+      const convs: any[] = data?.data?.payload ?? [];
+      if (convs.length === 0) break;
+      result.push(...convs);
+      if (convs.length < 25) break; // last page
+    }
+    return result;
+  }
+
+  /**
    * Send a bot reply to Chatwoot, finding the conversation by Telegram user ID.
    * Includes the Telegram message_id as source_id so Chatwoot doesn't re-send it.
    */
