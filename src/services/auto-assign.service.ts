@@ -9,6 +9,7 @@ export const AUTO_ASSIGN_ENABLED = true;
 export const AUTO_ASSIGN_SWEEP_INTERVAL_MINUTES = 2;
 const AUTO_ASSIGN_TIMEOUT_MINUTES = 5;
 const AUTO_ASSIGN_FALLBACK_TEAM_ID = 2; // Soporte Venezuela
+const AUTO_ASSIGN_MAX_PER_SWEEP = 10; // tope por barrido: evita ráfagas (drena backlog gradual)
 
 /**
  * Red de seguridad: asigna a un equipo de respaldo (Soporte VE por defecto) las
@@ -26,6 +27,7 @@ const AUTO_ASSIGN_FALLBACK_TEAM_ID = 2; // Soporte Venezuela
  * - Pide al endpoint de filtro SOLO las open team-less del inbox → escala con el
  *   limbo, no con el volumen total. (1, 2 y 5 se aplican en la API; 3 y 4 en código.)
  * - Sin estado en memoria: "sin equipo" es idempotente — al asignar, deja de calificar.
+ * - Tope de AUTO_ASSIGN_MAX_PER_SWEEP por barrido: drena el backlog gradualmente.
  * - Silencioso para el cliente: solo asigna equipo + nota privada para los agentes.
  */
 export async function sweepUnattendedConversations(): Promise<void> {
@@ -41,6 +43,7 @@ export async function sweepUnattendedConversations(): Promise<void> {
   }
 
   let assigned = 0;
+  let capped = false;
   for (const conv of convs) {
     const labels: string[] = conv.labels ?? [];
     const createdAtMs = (conv.created_at ?? 0) * 1000;
@@ -49,6 +52,11 @@ export async function sweepUnattendedConversations(): Promise<void> {
     if (conv.meta?.team?.id) continue; // defensivo: nunca tocar una con equipo
     if (labels.includes('interno')) continue; // etiqueta interno → conversación interna
     if (createdAtMs > cutoffMs) continue; // creada hace < 5 min → aún se le da tiempo
+
+    // Tope por barrido: drena el backlog en varios barridos en vez de una ráfaga,
+    // suaviza la carga API y acota la ventana de markBotAssignment (10s). El resto
+    // sigue siendo team-less, así que el próximo barrido lo recoge.
+    if (assigned >= AUTO_ASSIGN_MAX_PER_SWEEP) { capped = true; break; }
 
     try {
       await assignFallbackTeam(conv);
@@ -60,8 +68,10 @@ export async function sweepUnattendedConversations(): Promise<void> {
 
   if (assigned > 0) {
     logger.info(
-      { assigned, scanned: convs.length, inboxId },
-      'Auto-assign sweep: assigned unattended conversations to fallback team',
+      { assigned, scanned: convs.length, inboxId, capped },
+      capped
+        ? 'Auto-assign sweep: assigned (capped — el resto se procesa en el próximo barrido)'
+        : 'Auto-assign sweep: assigned unattended conversations to fallback team',
     );
   }
 }
