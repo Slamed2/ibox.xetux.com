@@ -243,9 +243,14 @@ async function handleVideoThumbnail(update: any): Promise<void> {
   // 1. Enviar al cliente el enlace de subida (+ espejo en Chatwoot para el agente)
   const uploadUrl = `${config.WEBAPP_BASE_URL}/upload?conversation_id=${conversationId}`;
   const clientMsg = '📎 Tu video supera el límite de 20 MB de Telegram. Súbelo aquí para que podamos verlo:';
+  // Mini app (webApp) en privado, como el login; enlace normal en grupos.
+  const isGroup = telegramUserId < 0;
+  const uploadKeyboard = isGroup
+    ? new InlineKeyboard().url('📎 Subir video', uploadUrl)
+    : new InlineKeyboard().webApp('📎 Subir video', uploadUrl);
   try {
     const sent = await bot.api.sendMessage(telegramUserId, clientMsg, {
-      reply_markup: new InlineKeyboard().url('📎 Subir video', uploadUrl),
+      reply_markup: uploadKeyboard,
     });
     await chatwootService.sendMessage(conversationId, {
       content: `${clientMsg}\n${uploadUrl}`,

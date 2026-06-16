@@ -553,6 +553,7 @@ const UPLOAD_HTML = `<!DOCTYPE html>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Subir archivo · Xetux</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1115; color: #e7e9ee; margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
@@ -587,6 +588,8 @@ const UPLOAD_HTML = `<!DOCTYPE html>
     <div class="msg" id="msg"></div>
   </div>
   <script>
+    var tg = window.Telegram && window.Telegram.WebApp;
+    if (tg) { try { tg.ready(); tg.expand(); } catch (e) {} }
     var params = new URLSearchParams(location.search);
     var conversationId = params.get('conversation_id');
     var fileInput = document.getElementById('file');
@@ -614,6 +617,7 @@ const UPLOAD_HTML = `<!DOCTYPE html>
         if (xhr.status >= 200 && xhr.status < 300) {
           msg.className='msg ok'; msg.textContent='✅ ¡Listo! Tu archivo fue enviado al chat.';
           bar.style.display='none';
+          if (tg) setTimeout(function(){ try { tg.close(); } catch (e) {} }, 1800);
         } else {
           var t = 'No se pudo subir.'; try { t = JSON.parse(xhr.responseText).error || t; } catch (e) {}
           msg.className='msg err'; msg.textContent='❌ ' + t; sendBtn.disabled=false; bar.style.display='none';
@@ -690,7 +694,7 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
             buffer,
             data.filename || 'archivo',
             data.mimetype || 'application/octet-stream',
-            '',
+            `📎 ${data.filename || 'Archivo'}`, // content no vacío: Chatwoot devuelve 422 si va vacío
             false,
             'incoming',
           );
