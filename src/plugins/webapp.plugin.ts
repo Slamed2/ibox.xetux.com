@@ -579,8 +579,8 @@ const UPLOAD_HTML = `<!DOCTYPE html>
     <h1>📎 Subir tu archivo</h1>
     <p>Tu video supera el límite de Telegram. Súbelo aquí y lo recibirá nuestro equipo en el chat.</p>
     <label class="drop">
-      <div>Toca para <strong>elegir el video</strong><br>o arrástralo aquí</div>
-      <input type="file" id="file" accept="video/*" />
+      <div>Toca para <strong>elegir tus videos</strong><br>(puedes elegir varios)</div>
+      <input type="file" id="file" accept="video/*" multiple />
     </label>
     <div class="file" id="fileName"></div>
     <div class="bar" id="bar"><span id="barFill"></span></div>
@@ -599,8 +599,10 @@ const UPLOAD_HTML = `<!DOCTYPE html>
     var bar = document.getElementById('bar');
     var barFill = document.getElementById('barFill');
     fileInput.addEventListener('change', function () {
-      if (fileInput.files.length) {
-        fileName.textContent = fileInput.files[0].name + ' (' + (fileInput.files[0].size/1048576).toFixed(1) + ' MB)';
+      var n = fileInput.files.length;
+      if (n) {
+        var total = 0; for (var i = 0; i < n; i++) total += fileInput.files[i].size;
+        fileName.textContent = (n === 1 ? fileInput.files[0].name : n + ' archivos') + ' (' + (total/1048576).toFixed(1) + ' MB)';
         sendBtn.disabled = false;
         msg.textContent = '';
       }
@@ -608,7 +610,7 @@ const UPLOAD_HTML = `<!DOCTYPE html>
     sendBtn.addEventListener('click', function () {
       if (!fileInput.files.length || !conversationId) { msg.className='msg err'; msg.textContent='Falta el archivo o el enlace es inválido.'; return; }
       var fd = new FormData();
-      fd.append('file', fileInput.files[0]);
+      for (var i = 0; i < fileInput.files.length; i++) fd.append('file', fileInput.files[i]);
       var xhr = new XMLHttpRequest();
       xhr.open('POST', '/api/webapp/upload?conversation_id=' + encodeURIComponent(conversationId));
       sendBtn.disabled = true; bar.style.display='block'; msg.className='msg'; msg.textContent='Subiendo...';
@@ -632,7 +634,7 @@ const UPLOAD_HTML = `<!DOCTYPE html>
 
 export const webappPlugin: FastifyPluginAsync = async (fastify) => {
   // Soporte de subida de archivos (para /api/webapp/upload)
-  await fastify.register(multipart, { limits: { fileSize: 100 * 1024 * 1024, files: 1 } });
+  await fastify.register(multipart, { limits: { fileSize: 100 * 1024 * 1024, files: 5 } });
 
   // Serve the mini app HTML
   fastify.get('/webapp', async (_request, reply) => {
@@ -668,47 +670,48 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
     }
     const convId = parseInt(conversationId, 10);
 
-    const data = await request.file();
-    if (!data) return reply.code(400).send({ error: 'No se recibió ningún archivo.' });
-
-    let buffer: Buffer;
+    const files: Array<{ buffer: Buffer; filename: string; mimeType: string }> = [];
     try {
-      buffer = await data.toBuffer();
+      for await (const part of request.files()) {
+        const buffer = await part.toBuffer();
+        files.push({
+          buffer,
+          filename: part.filename || 'archivo',
+          mimeType: part.mimetype || 'application/octet-stream',
+        });
+      }
     } catch (err: any) {
-      logger.warn({ err: err?.message, conversationId }, 'Upload: archivo demasiado grande');
-      return reply.code(413).send({ error: 'El archivo supera el tamaño permitido.' });
+      logger.warn({ err: err?.message, conversationId }, 'Upload: archivo demasiado grande o inválido');
+      return reply.code(413).send({ error: 'Algún archivo supera el tamaño permitido.' });
     }
+    if (!files.length) return reply.code(400).send({ error: 'No se recibió ningún archivo.' });
 
+    const totalBytes = files.reduce((n, f) => n + f.buffer.length, 0);
     try {
       await withExecutionLog(
         {
           eventType: 'webapp:upload',
           source: 'webapp',
           direction: 'inbound',
-          inputData: { conversationId: convId, filename: data.filename, mime: data.mimetype, bytes: buffer.length },
+          inputData: { conversationId: convId, count: files.length, bytes: totalBytes, names: files.map(f => f.filename) },
           conversationId: String(convId),
         },
         async () => {
-          // outgoing + private = nota interna (modo probado con la miniatura). Así el
-          // agente recibe el archivo en el chat y NO se reenvía al cliente por Telegram.
-          await chatwootService.uploadAttachment(
-            convId,
-            buffer,
-            data.filename || 'archivo',
-            data.mimetype || 'application/octet-stream',
-            `📎 Archivo subido por el cliente: ${data.filename || 'archivo'}`,
-            true,
-            'outgoing',
-          );
-          return { ok: true, bytes: buffer.length };
+          // outgoing + private = nota interna (modo probado). El agente recibe los
+          // archivos en el chat y NO se reenvían al cliente por Telegram.
+          const caption = files.length === 1
+            ? `📎 Archivo subido por el cliente: ${files[0].filename}`
+            : `📎 ${files.length} archivos subidos por el cliente`;
+          await chatwootService.uploadAttachments(convId, files, caption, true, 'outgoing');
+          return { ok: true, count: files.length, bytes: totalBytes };
         },
       );
     } catch (err: any) {
       logger.error({ err: err?.message, conversationId: convId }, 'Upload to Chatwoot failed');
-      return reply.code(502).send({ error: 'No se pudo enviar el archivo al chat. Puede superar el límite de Chatwoot.' });
+      return reply.code(502).send({ error: 'No se pudo enviar al chat. Puede superar el límite de Chatwoot.' });
     }
 
-    logger.info({ conversationId: convId, filename: data.filename, bytes: buffer.length }, 'WebApp upload posted to Chatwoot');
+    logger.info({ conversationId: convId, count: files.length, bytes: totalBytes }, 'WebApp upload posted to Chatwoot');
     return reply.send({ ok: true });
   });
 

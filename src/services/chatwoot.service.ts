@@ -114,16 +114,13 @@ class ChatwootService {
   }
 
   /**
-   * Upload a file as an attachment on a conversation (multipart/form-data).
-   * Bypasses the JSON client because attachments need a multipart body.
-   * Used to push media into Chatwoot that its native channel couldn't (e.g. the
-   * thumbnail of a >20MB Telegram video, which Chatwoot can't download itself).
+   * Upload one or more files as attachments on a conversation (multipart/form-data).
+   * Bypasses the JSON client because attachments need a multipart body. Used to push
+   * media into Chatwoot that its native channel couldn't (e.g. >20MB Telegram videos).
    */
-  async uploadAttachment(
+  async uploadAttachments(
     conversationId: number,
-    file: Buffer,
-    filename: string,
-    mimeType: string,
+    files: Array<{ buffer: Buffer; filename: string; mimeType: string }>,
     content: string,
     isPrivate = false,
     messageType: 'incoming' | 'outgoing' = 'outgoing',
@@ -132,7 +129,9 @@ class ChatwootService {
     form.append('content', content);
     form.append('message_type', messageType);
     if (isPrivate) form.append('private', 'true');
-    form.append('attachments[]', new Blob([new Uint8Array(file)], { type: mimeType }), filename);
+    for (const f of files) {
+      form.append('attachments[]', new Blob([new Uint8Array(f.buffer)], { type: f.mimeType }), f.filename);
+    }
 
     try {
       const { data } = await axios.post(
@@ -154,6 +153,19 @@ class ChatwootService {
       const detail = typeof body === 'string' ? body : JSON.stringify(body ?? {});
       throw new Error(`Chatwoot upload failed (${status ?? '?'}): ${detail.slice(0, 400)}`);
     }
+  }
+
+  /** Single-file convenience wrapper around uploadAttachments. */
+  async uploadAttachment(
+    conversationId: number,
+    file: Buffer,
+    filename: string,
+    mimeType: string,
+    content: string,
+    isPrivate = false,
+    messageType: 'incoming' | 'outgoing' = 'outgoing',
+  ) {
+    return this.uploadAttachments(conversationId, [{ buffer: file, filename, mimeType }], content, isPrivate, messageType);
   }
 
   async deleteMessage(conversationId: number, messageId: number) {
