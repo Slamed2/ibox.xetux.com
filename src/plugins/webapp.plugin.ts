@@ -689,14 +689,16 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
           conversationId: String(convId),
         },
         async () => {
+          // outgoing + private = nota interna (modo probado con la miniatura). Así el
+          // agente recibe el archivo en el chat y NO se reenvía al cliente por Telegram.
           await chatwootService.uploadAttachment(
             convId,
             buffer,
             data.filename || 'archivo',
             data.mimetype || 'application/octet-stream',
-            `📎 ${data.filename || 'Archivo'}`, // content no vacío: Chatwoot devuelve 422 si va vacío
-            false,
-            'incoming',
+            `📎 Archivo subido por el cliente: ${data.filename || 'archivo'}`,
+            true,
+            'outgoing',
           );
           return { ok: true, bytes: buffer.length };
         },

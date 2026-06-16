@@ -134,19 +134,26 @@ class ChatwootService {
     if (isPrivate) form.append('private', 'true');
     form.append('attachments[]', new Blob([new Uint8Array(file)], { type: mimeType }), filename);
 
-    const { data } = await axios.post(
-      `${config.CHATWOOT_BASE_URL}/api/v1/accounts/${this.accountId}/conversations/${conversationId}/messages`,
-      form,
-      {
-        headers: { api_access_token: config.CHATWOOT_API_TOKEN },
-        timeout: config.CHATWOOT_API_TIMEOUT_MS,
-        httpAgent: keepAliveHttpAgent,
-        httpsAgent: keepAliveHttpsAgent,
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-      },
-    );
-    return data;
+    try {
+      const { data } = await axios.post(
+        `${config.CHATWOOT_BASE_URL}/api/v1/accounts/${this.accountId}/conversations/${conversationId}/messages`,
+        form,
+        {
+          headers: { api_access_token: config.CHATWOOT_API_TOKEN },
+          timeout: config.CHATWOOT_API_TIMEOUT_MS,
+          httpAgent: keepAliveHttpAgent,
+          httpsAgent: keepAliveHttpsAgent,
+          maxContentLength: Infinity,
+          maxBodyLength: Infinity,
+        },
+      );
+      return data;
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const body = err?.response?.data;
+      const detail = typeof body === 'string' ? body : JSON.stringify(body ?? {});
+      throw new Error(`Chatwoot upload failed (${status ?? '?'}): ${detail.slice(0, 400)}`);
+    }
   }
 
   async deleteMessage(conversationId: number, messageId: number) {
