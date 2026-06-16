@@ -113,6 +113,41 @@ class ChatwootService {
     return data;
   }
 
+  /**
+   * Upload a file as an attachment on a conversation (multipart/form-data).
+   * Bypasses the JSON client because attachments need a multipart body.
+   * Used to push media into Chatwoot that its native channel couldn't (e.g. the
+   * thumbnail of a >20MB Telegram video, which Chatwoot can't download itself).
+   */
+  async uploadAttachment(
+    conversationId: number,
+    file: Buffer,
+    filename: string,
+    mimeType: string,
+    content: string,
+    isPrivate = false,
+  ) {
+    const form = new FormData();
+    form.append('content', content);
+    form.append('message_type', 'outgoing');
+    if (isPrivate) form.append('private', 'true');
+    form.append('attachments[]', new Blob([new Uint8Array(file)], { type: mimeType }), filename);
+
+    const { data } = await axios.post(
+      `${config.CHATWOOT_BASE_URL}/api/v1/accounts/${this.accountId}/conversations/${conversationId}/messages`,
+      form,
+      {
+        headers: { api_access_token: config.CHATWOOT_API_TOKEN },
+        timeout: config.CHATWOOT_API_TIMEOUT_MS,
+        httpAgent: keepAliveHttpAgent,
+        httpsAgent: keepAliveHttpsAgent,
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      },
+    );
+    return data;
+  }
+
   async deleteMessage(conversationId: number, messageId: number) {
     logger.debug({ conversationId, messageId }, 'Deleting message in Chatwoot');
     await this.client.delete(`/conversations/${conversationId}/messages/${messageId}`);
