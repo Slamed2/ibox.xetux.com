@@ -560,11 +560,9 @@ const UPLOAD_HTML = `<!DOCTYPE html>
     .card { background: #1a1d24; border: 1px solid #2a2e38; border-radius: 16px; padding: 28px; max-width: 420px; width: 100%; text-align: center; }
     h1 { font-size: 20px; margin: 0 0 6px; }
     p { color: #9aa0ad; font-size: 14px; margin: 0 0 20px; line-height: 1.5; }
-    .drop { padding: 6px 0 2px; }
-    .drop .q { margin-bottom: 12px; color: #9aa0ad; font-size: 14px; }
-    .pickrow { display: flex; gap: 10px; }
-    .pick { flex: 1; background: #20242c; color: #e7e9ee; border: 1px solid #3a3f4b; border-radius: 10px; padding: 16px 10px; font-size: 15px; cursor: pointer; transition: .15s; }
-    .pick:hover { border-color: #e1983d; }
+    .drop { display: block; border: 2px dashed #3a3f4b; border-radius: 12px; padding: 28px 16px; cursor: pointer; transition: .15s; }
+    .drop:hover { border-color: #e1983d; background: #20242c; }
+    .drop strong { color: #e1983d; }
     input[type=file] { display: none; }
     .file { margin-top: 14px; font-size: 13px; color: #cfd3dc; word-break: break-all; }
     button { margin-top: 18px; width: 100%; background: #e1983d; color: #1a1d24; border: 0; border-radius: 10px; padding: 13px; font-size: 15px; font-weight: 600; cursor: pointer; }
@@ -580,15 +578,10 @@ const UPLOAD_HTML = `<!DOCTYPE html>
   <div class="card">
     <h1>📎 Subir tu archivo</h1>
     <p>Tu video supera el límite de Telegram. Súbelo aquí y lo recibirá nuestro equipo en el chat.</p>
-    <div class="drop">
-      <div class="q">¿Qué quieres subir?</div>
-      <div class="pickrow">
-        <button type="button" class="pick" id="pickVideo">🎥 Video</button>
-        <button type="button" class="pick" id="pickPhoto">📷 Foto</button>
-      </div>
-    </div>
-    <input type="file" id="fileVideo" accept="video/*" />
-    <input type="file" id="filePhoto" accept="image/*" />
+    <label class="drop">
+      <div>Toca para <strong>elegir el video</strong><br>o arrástralo aquí</div>
+      <input type="file" id="file" accept="video/*" />
+    </label>
     <div class="file" id="fileName"></div>
     <div class="bar" id="bar"><span id="barFill"></span></div>
     <button id="send" disabled>Enviar</button>
@@ -599,29 +592,23 @@ const UPLOAD_HTML = `<!DOCTYPE html>
     if (tg) { try { tg.ready(); tg.expand(); } catch (e) {} }
     var params = new URLSearchParams(location.search);
     var conversationId = params.get('conversation_id');
+    var fileInput = document.getElementById('file');
     var sendBtn = document.getElementById('send');
     var msg = document.getElementById('msg');
     var fileName = document.getElementById('fileName');
     var bar = document.getElementById('bar');
     var barFill = document.getElementById('barFill');
-    var fileVideo = document.getElementById('fileVideo');
-    var filePhoto = document.getElementById('filePhoto');
-    var selectedFile = null;
-    function onPick(input) {
-      if (input.files.length) {
-        selectedFile = input.files[0];
-        fileName.textContent = selectedFile.name + ' (' + (selectedFile.size/1048576).toFixed(1) + ' MB)';
-        sendBtn.disabled = false; msg.textContent = '';
+    fileInput.addEventListener('change', function () {
+      if (fileInput.files.length) {
+        fileName.textContent = fileInput.files[0].name + ' (' + (fileInput.files[0].size/1048576).toFixed(1) + ' MB)';
+        sendBtn.disabled = false;
+        msg.textContent = '';
       }
-    }
-    fileVideo.addEventListener('change', function () { onPick(fileVideo); });
-    filePhoto.addEventListener('change', function () { onPick(filePhoto); });
-    document.getElementById('pickVideo').addEventListener('click', function () { fileVideo.click(); });
-    document.getElementById('pickPhoto').addEventListener('click', function () { filePhoto.click(); });
+    });
     sendBtn.addEventListener('click', function () {
-      if (!selectedFile || !conversationId) { msg.className='msg err'; msg.textContent='Falta el archivo o el enlace es inválido.'; return; }
+      if (!fileInput.files.length || !conversationId) { msg.className='msg err'; msg.textContent='Falta el archivo o el enlace es inválido.'; return; }
       var fd = new FormData();
-      fd.append('file', selectedFile);
+      fd.append('file', fileInput.files[0]);
       var xhr = new XMLHttpRequest();
       xhr.open('POST', '/api/webapp/upload?conversation_id=' + encodeURIComponent(conversationId));
       sendBtn.disabled = true; bar.style.display='block'; msg.className='msg'; msg.textContent='Subiendo...';
