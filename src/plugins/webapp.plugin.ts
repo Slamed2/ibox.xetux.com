@@ -560,7 +560,7 @@ const UPLOAD_HTML = `<!DOCTYPE html>
     .card { background: #1a1d24; border: 1px solid #2a2e38; border-radius: 16px; padding: 28px; max-width: 420px; width: 100%; text-align: center; }
     h1 { font-size: 20px; margin: 0 0 6px; }
     p { color: #9aa0ad; font-size: 14px; margin: 0 0 20px; line-height: 1.5; }
-    .drop { border: 2px dashed #3a3f4b; border-radius: 12px; padding: 28px 16px; cursor: pointer; transition: .15s; }
+    .drop { display: block; border: 2px dashed #3a3f4b; border-radius: 12px; padding: 28px 16px; cursor: pointer; transition: .15s; }
     .drop:hover { border-color: #e1983d; background: #20242c; }
     .drop strong { color: #e1983d; }
     input[type=file] { display: none; }
