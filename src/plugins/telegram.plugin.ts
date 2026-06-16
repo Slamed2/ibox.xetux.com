@@ -1,5 +1,5 @@
 import { FastifyPluginAsync } from 'fastify';
-import { webhookCallback } from 'grammy';
+import { webhookCallback, InlineKeyboard } from 'grammy';
 import axios from 'axios';
 import { bot, setupTelegramWebhook, registerGroupMigration, getMigratedGroupId } from '../services/telegram.service.js';
 import { keepAliveHttpAgent, keepAliveHttpsAgent, chatwootService } from '../services/chatwoot.service.js';
@@ -193,10 +193,12 @@ const TELEGRAM_MAX_DOWNLOAD = 20 * 1024 * 1024; // 20 MB — límite de descarga
 
 /**
  * Cuando llega un VIDEO que supera el límite de descarga de bots (20 MB), Chatwoot
- * no puede bajarlo y lo guarda como mensaje vacío. Aquí descargamos la MINIATURA
- * (siempre <20 MB, por eso sí se puede) y la subimos a Chatwoot como nota interna,
- * para que el agente al menos vea de qué video se trata. También loguea la metadata
- * real del media (tamaño, duración, etc.).
+ * no puede bajarlo y lo guarda como mensaje vacío. Para no perder el video:
+ *  1. Le enviamos al cliente un enlace a la página de subida (sube por HTTP, esquiva
+ *     el límite de Telegram) — y espejamos ese aviso en Chatwoot.
+ *  2. Descargamos la MINIATURA (siempre <20 MB) y la subimos como nota interna,
+ *     para que el agente vea de qué video se trata mientras el cliente sube el real.
+ * También loguea la metadata real del media (tamaño, duración, etc.).
  */
 async function handleVideoThumbnail(update: any): Promise<void> {
   const msg = update?.message ?? update?.edited_message;
@@ -238,6 +240,23 @@ async function handleVideoThumbnail(update: any): Promise<void> {
     return;
   }
 
+  // 1. Enviar al cliente el enlace de subida (+ espejo en Chatwoot para el agente)
+  const uploadUrl = `${config.WEBAPP_BASE_URL}/upload?conversation_id=${conversationId}`;
+  const clientMsg = '📎 Tu video supera el límite de 20 MB de Telegram. Súbelo aquí para que podamos verlo:';
+  try {
+    const sent = await bot.api.sendMessage(telegramUserId, clientMsg, {
+      reply_markup: new InlineKeyboard().url('📎 Subir video', uploadUrl),
+    });
+    await chatwootService.sendMessage(conversationId, {
+      content: `${clientMsg}\n${uploadUrl}`,
+      message_type: 'outgoing',
+      source_id: String(sent.message_id),
+    });
+  } catch (err: any) {
+    logger.error({ err: err?.message, conversationId }, 'Failed to send upload link to client');
+  }
+
+  // 2. Subir la miniatura como nota interna para que el agente vea de qué video se trata
   const sizeMb = (fileSize / 1048576).toFixed(1);
   const thumb = media.thumbnail ?? media.thumb;
 

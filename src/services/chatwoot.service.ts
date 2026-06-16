@@ -126,10 +126,11 @@ class ChatwootService {
     mimeType: string,
     content: string,
     isPrivate = false,
+    messageType: 'incoming' | 'outgoing' = 'outgoing',
   ) {
     const form = new FormData();
     form.append('content', content);
-    form.append('message_type', 'outgoing');
+    form.append('message_type', messageType);
     if (isPrivate) form.append('private', 'true');
     form.append('attachments[]', new Blob([new Uint8Array(file)], { type: mimeType }), filename);
 

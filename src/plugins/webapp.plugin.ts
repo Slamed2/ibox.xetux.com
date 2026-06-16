@@ -1,4 +1,5 @@
 import { FastifyPluginAsync } from 'fastify';
+import multipart from '@fastify/multipart';
 import { AxiosError } from 'axios';
 import { InlineKeyboard } from 'grammy';
 import fs from 'node:fs';
@@ -545,10 +546,98 @@ const STANDALONE_LOGIN_HTML = `<!DOCTYPE html>
 </body>
 </html>`;
 
+// ─── Página de subida de archivos grandes (videos >20MB que Telegram no entrega) ──
+const UPLOAD_HTML = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Subir archivo · Xetux</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f1115; color: #e7e9ee; margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .card { background: #1a1d24; border: 1px solid #2a2e38; border-radius: 16px; padding: 28px; max-width: 420px; width: 100%; text-align: center; }
+    h1 { font-size: 20px; margin: 0 0 6px; }
+    p { color: #9aa0ad; font-size: 14px; margin: 0 0 20px; line-height: 1.5; }
+    .drop { border: 2px dashed #3a3f4b; border-radius: 12px; padding: 28px 16px; cursor: pointer; transition: .15s; }
+    .drop:hover { border-color: #e1983d; background: #20242c; }
+    .drop strong { color: #e1983d; }
+    input[type=file] { display: none; }
+    .file { margin-top: 14px; font-size: 13px; color: #cfd3dc; word-break: break-all; }
+    button { margin-top: 18px; width: 100%; background: #e1983d; color: #1a1d24; border: 0; border-radius: 10px; padding: 13px; font-size: 15px; font-weight: 600; cursor: pointer; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .msg { margin-top: 16px; font-size: 14px; min-height: 20px; }
+    .ok { color: #4ade80; }
+    .err { color: #f87171; }
+    .bar { height: 6px; background: #2a2e38; border-radius: 4px; overflow: hidden; margin-top: 16px; display: none; }
+    .bar span { display: block; height: 100%; width: 0; background: #e1983d; transition: width .2s; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>📎 Subir tu archivo</h1>
+    <p>Tu video supera el límite de Telegram. Súbelo aquí y lo recibirá nuestro equipo en el chat.</p>
+    <label class="drop" id="drop">
+      <div>Toca para <strong>elegir un archivo</strong><br>o arrástralo aquí</div>
+      <input type="file" id="file" />
+    </label>
+    <div class="file" id="fileName"></div>
+    <div class="bar" id="bar"><span id="barFill"></span></div>
+    <button id="send" disabled>Enviar</button>
+    <div class="msg" id="msg"></div>
+  </div>
+  <script>
+    var params = new URLSearchParams(location.search);
+    var conversationId = params.get('conversation_id');
+    var fileInput = document.getElementById('file');
+    var sendBtn = document.getElementById('send');
+    var msg = document.getElementById('msg');
+    var fileName = document.getElementById('fileName');
+    var bar = document.getElementById('bar');
+    var barFill = document.getElementById('barFill');
+    fileInput.addEventListener('change', function () {
+      if (fileInput.files.length) {
+        fileName.textContent = fileInput.files[0].name + ' (' + (fileInput.files[0].size/1048576).toFixed(1) + ' MB)';
+        sendBtn.disabled = false;
+        msg.textContent = '';
+      }
+    });
+    sendBtn.addEventListener('click', function () {
+      if (!fileInput.files.length || !conversationId) { msg.className='msg err'; msg.textContent='Falta el archivo o el enlace es inválido.'; return; }
+      var fd = new FormData();
+      fd.append('file', fileInput.files[0]);
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/webapp/upload?conversation_id=' + encodeURIComponent(conversationId));
+      sendBtn.disabled = true; bar.style.display='block'; msg.className='msg'; msg.textContent='Subiendo...';
+      xhr.upload.onprogress = function (e) { if (e.lengthComputable) barFill.style.width = Math.round(e.loaded/e.total*100)+'%'; };
+      xhr.onload = function () {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          msg.className='msg ok'; msg.textContent='✅ ¡Listo! Tu archivo fue enviado al chat.';
+          bar.style.display='none';
+        } else {
+          var t = 'No se pudo subir.'; try { t = JSON.parse(xhr.responseText).error || t; } catch (e) {}
+          msg.className='msg err'; msg.textContent='❌ ' + t; sendBtn.disabled=false; bar.style.display='none';
+        }
+      };
+      xhr.onerror = function () { msg.className='msg err'; msg.textContent='❌ Error de red.'; sendBtn.disabled=false; bar.style.display='none'; };
+      xhr.send(fd);
+    });
+  </script>
+</body>
+</html>`;
+
 export const webappPlugin: FastifyPluginAsync = async (fastify) => {
+  // Soporte de subida de archivos (para /api/webapp/upload)
+  await fastify.register(multipart, { limits: { fileSize: 100 * 1024 * 1024, files: 1 } });
+
   // Serve the mini app HTML
   fastify.get('/webapp', async (_request, reply) => {
     reply.type('text/html').send(WEBAPP_HTML);
+  });
+
+  // Página de subida de archivos grandes
+  fastify.get('/webapp/upload', async (_request, reply) => {
+    reply.type('text/html').send(UPLOAD_HTML);
   });
 
   // Serve standalone login page (for group chats — no Telegram SDK)
@@ -565,6 +654,56 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
     } else {
       reply.code(404).send('Image not found');
     }
+  });
+
+  // Recibe el archivo subido por el cliente y lo postea a Chatwoot como mensaje entrante
+  fastify.post<{ Querystring: { conversation_id?: string } }>('/api/webapp/upload', async (request, reply) => {
+    const conversationId = request.query.conversation_id;
+    if (!conversationId || !/^\d+$/.test(conversationId)) {
+      return reply.code(400).send({ error: 'conversation_id inválido' });
+    }
+    const convId = parseInt(conversationId, 10);
+
+    const data = await request.file();
+    if (!data) return reply.code(400).send({ error: 'No se recibió ningún archivo.' });
+
+    let buffer: Buffer;
+    try {
+      buffer = await data.toBuffer();
+    } catch (err: any) {
+      logger.warn({ err: err?.message, conversationId }, 'Upload: archivo demasiado grande');
+      return reply.code(413).send({ error: 'El archivo supera el tamaño permitido.' });
+    }
+
+    try {
+      await withExecutionLog(
+        {
+          eventType: 'webapp:upload',
+          source: 'webapp',
+          direction: 'inbound',
+          inputData: { conversationId: convId, filename: data.filename, mime: data.mimetype, bytes: buffer.length },
+          conversationId: String(convId),
+        },
+        async () => {
+          await chatwootService.uploadAttachment(
+            convId,
+            buffer,
+            data.filename || 'archivo',
+            data.mimetype || 'application/octet-stream',
+            '',
+            false,
+            'incoming',
+          );
+          return { ok: true, bytes: buffer.length };
+        },
+      );
+    } catch (err: any) {
+      logger.error({ err: err?.message, conversationId: convId }, 'Upload to Chatwoot failed');
+      return reply.code(502).send({ error: 'No se pudo enviar el archivo al chat. Puede superar el límite de Chatwoot.' });
+    }
+
+    logger.info({ conversationId: convId, filename: data.filename, bytes: buffer.length }, 'WebApp upload posted to Chatwoot');
+    return reply.send({ ok: true });
   });
 
   // Handle form submission — update Chatwoot contact
