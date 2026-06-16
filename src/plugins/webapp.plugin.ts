@@ -580,7 +580,7 @@ const UPLOAD_HTML = `<!DOCTYPE html>
     <p>Tu video supera el límite de Telegram. Súbelo aquí y lo recibirá nuestro equipo en el chat.</p>
     <label class="drop" id="drop">
       <div>Toca para <strong>elegir un archivo</strong><br>o arrástralo aquí</div>
-      <input type="file" id="file" accept="video/*" />
+      <input type="file" id="file" accept="image/*,video/*" />
     </label>
     <div class="file" id="fileName"></div>
     <div class="bar" id="bar"><span id="barFill"></span></div>
