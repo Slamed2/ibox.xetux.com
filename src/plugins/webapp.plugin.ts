@@ -730,6 +730,25 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
       return reply.code(502).send({ error: 'No se pudo enviar al chat. Puede superar el límite de Chatwoot.' });
     }
 
+    // Confirmar al cliente por Telegram que recibimos su(s) archivo(s) (+ espejo en Chatwoot)
+    try {
+      const conv = await chatwootService.getConversation(convId);
+      const tgId = conv?.meta?.sender?.additional_attributes?.social_telegram_user_id as number | undefined;
+      if (tgId) {
+        const confirm = files.length === 1
+          ? `✅ Recibimos tu archivo: ${files[0].filename}. ¡Gracias! 🙌`
+          : `✅ Recibimos tus ${files.length} archivos. ¡Gracias! 🙌`;
+        const sent = await bot.api.sendMessage(tgId, confirm);
+        await chatwootService.sendMessage(convId, {
+          content: confirm,
+          message_type: 'outgoing',
+          source_id: String(sent.message_id),
+        });
+      }
+    } catch (err: any) {
+      logger.warn({ err: err?.message, conversationId: convId }, 'No se pudo enviar la confirmación al cliente');
+    }
+
     logger.info({ conversationId: convId, count: files.length, bytes: totalBytes }, 'WebApp upload posted to Chatwoot');
     return reply.send({ ok: true });
   });
