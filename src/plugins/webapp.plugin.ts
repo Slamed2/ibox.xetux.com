@@ -560,9 +560,11 @@ const UPLOAD_HTML = `<!DOCTYPE html>
     .card { background: #1a1d24; border: 1px solid #2a2e38; border-radius: 16px; padding: 28px; max-width: 420px; width: 100%; text-align: center; }
     h1 { font-size: 20px; margin: 0 0 6px; }
     p { color: #9aa0ad; font-size: 14px; margin: 0 0 20px; line-height: 1.5; }
-    .drop { display: block; border: 2px dashed #3a3f4b; border-radius: 12px; padding: 28px 16px; cursor: pointer; transition: .15s; }
-    .drop:hover { border-color: #e1983d; background: #20242c; }
-    .drop strong { color: #e1983d; }
+    .drop { padding: 4px 0 2px; }
+    .drop .q { margin-bottom: 12px; color: #9aa0ad; font-size: 14px; }
+    .pickrow { display: flex; gap: 10px; }
+    .pick { flex: 1; background: #20242c; color: #e7e9ee; border: 1px solid #3a3f4b; border-radius: 10px; padding: 15px 8px; font-size: 14px; cursor: pointer; transition: .15s; }
+    .pick:hover { border-color: #e1983d; }
     input[type=file] { display: none; }
     .file { margin-top: 14px; font-size: 13px; color: #cfd3dc; word-break: break-all; }
     button { margin-top: 18px; width: 100%; background: #e1983d; color: #1a1d24; border: 0; border-radius: 10px; padding: 13px; font-size: 15px; font-weight: 600; cursor: pointer; }
@@ -578,10 +580,15 @@ const UPLOAD_HTML = `<!DOCTYPE html>
   <div class="card">
     <h1>📎 Subir tu archivo</h1>
     <p>Sube aquí tus archivos (videos, fotos o documentos) y los recibirá nuestro equipo en el chat.</p>
-    <label class="drop">
-      <div>Toca para <strong>cargar archivos</strong><br>(videos, fotos o documentos)</div>
-      <input type="file" id="fFile" multiple />
-    </label>
+    <div class="drop">
+      <div class="q">Elige qué subir (puedes combinar varios):</div>
+      <div class="pickrow">
+        <button type="button" class="pick" id="pickVideo">🎥 Video</button>
+        <button type="button" class="pick" id="pickFile">📷 Foto / Archivo</button>
+      </div>
+    </div>
+    <input type="file" id="fVideo" accept="video/*" multiple />
+    <input type="file" id="fFile" multiple />
     <div class="file" id="fileName"></div>
     <div class="bar" id="bar"><span id="barFill"></span></div>
     <button id="send" disabled>Enviar</button>
@@ -597,7 +604,6 @@ const UPLOAD_HTML = `<!DOCTYPE html>
     var fileName = document.getElementById('fileName');
     var bar = document.getElementById('bar');
     var barFill = document.getElementById('barFill');
-    var fileInput = document.getElementById('fFile');
     var selected = [];
     function render() {
       if (!selected.length) { fileName.textContent = ''; sendBtn.disabled = true; return; }
@@ -605,11 +611,15 @@ const UPLOAD_HTML = `<!DOCTYPE html>
       fileName.textContent = selected.length + (selected.length === 1 ? ' archivo' : ' archivos') + ' (' + (total/1048576).toFixed(1) + ' MB)';
       sendBtn.disabled = false; msg.textContent = '';
     }
-    fileInput.addEventListener('change', function () {
-      for (var i = 0; i < fileInput.files.length; i++) selected.push(fileInput.files[i]);
-      fileInput.value = '';
+    function addFrom(input) {
+      for (var i = 0; i < input.files.length; i++) selected.push(input.files[i]);
+      input.value = '';
       render();
-    });
+    }
+    document.getElementById('fVideo').addEventListener('change', function () { addFrom(this); });
+    document.getElementById('fFile').addEventListener('change', function () { addFrom(this); });
+    document.getElementById('pickVideo').addEventListener('click', function () { document.getElementById('fVideo').click(); });
+    document.getElementById('pickFile').addEventListener('click', function () { document.getElementById('fFile').click(); });
     sendBtn.addEventListener('click', function () {
       if (!selected.length || !conversationId) { msg.className='msg err'; msg.textContent='Falta el archivo o el enlace es inválido.'; return; }
       var fd = new FormData();
