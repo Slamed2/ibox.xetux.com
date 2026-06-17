@@ -583,9 +583,9 @@ const UPLOAD_HTML = `<!DOCTYPE html>
     <div class="drop">
       <div class="q">¿Qué quieres subir? Puedes combinar varios:</div>
       <div class="pickrow">
-        <button type="button" class="pick" id="pickVideo">🎥 Cargar video</button>
-        <button type="button" class="pick" id="pickPhoto">🖼️ Cargar imagen</button>
-        <button type="button" class="pick" id="pickFile">📄 Cargar archivos</button>
+        <button type="button" class="pick" id="pickVideo">Cargar video</button>
+        <button type="button" class="pick" id="pickPhoto">Cargar imagen</button>
+        <button type="button" class="pick" id="pickFile">Cargar archivos</button>
       </div>
     </div>
     <input type="file" id="fVideo" accept="video/*" multiple />
