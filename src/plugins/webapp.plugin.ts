@@ -735,9 +735,8 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
       const conv = await chatwootService.getConversation(convId);
       const tgId = conv?.meta?.sender?.additional_attributes?.social_telegram_user_id as number | undefined;
       if (tgId) {
-        const confirm = files.length === 1
-          ? `✅ Recibimos tu archivo: ${files[0].filename}. ¡Gracias! 🙌`
-          : `✅ Recibimos tus ${files.length} archivos. ¡Gracias! 🙌`;
+        const n = files.length;
+        const confirm = `✅ Recibimos ${n} ${n === 1 ? 'archivo' : 'archivos'}. ¡Gracias! 🙌`;
         const sent = await bot.api.sendMessage(tgId, confirm);
         await chatwootService.sendMessage(convId, {
           content: confirm,
