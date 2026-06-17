@@ -562,8 +562,8 @@ const UPLOAD_HTML = `<!DOCTYPE html>
     p { color: #9aa0ad; font-size: 14px; margin: 0 0 20px; line-height: 1.5; }
     .drop { padding: 4px 0 2px; }
     .drop .q { margin-bottom: 12px; color: #9aa0ad; font-size: 14px; }
-    .pickrow { display: flex; gap: 10px; }
-    .pick { flex: 1; background: #20242c; color: #e7e9ee; border: 1px solid #3a3f4b; border-radius: 10px; padding: 15px 8px; font-size: 14px; cursor: pointer; transition: .15s; }
+    .pickrow { display: flex; flex-direction: column; gap: 10px; }
+    .pick { background: #20242c; color: #e7e9ee; border: 1px solid #3a3f4b; border-radius: 10px; padding: 15px; font-size: 15px; cursor: pointer; transition: .15s; }
     .pick:hover { border-color: #e1983d; }
     input[type=file] { display: none; }
     .file { margin-top: 14px; font-size: 13px; color: #cfd3dc; word-break: break-all; }
@@ -581,13 +581,15 @@ const UPLOAD_HTML = `<!DOCTYPE html>
     <h1>📎 Subir tu archivo</h1>
     <p>Sube aquí tus archivos (videos, fotos o documentos) y los recibirá nuestro equipo en el chat.</p>
     <div class="drop">
-      <div class="q">Elige qué subir (puedes combinar varios):</div>
+      <div class="q">¿Qué quieres subir? Puedes combinar varios:</div>
       <div class="pickrow">
-        <button type="button" class="pick" id="pickVideo">🎥 Video</button>
-        <button type="button" class="pick" id="pickFile">📷 Foto / Archivo</button>
+        <button type="button" class="pick" id="pickVideo">🎥 Cargar video</button>
+        <button type="button" class="pick" id="pickPhoto">🖼️ Cargar imagen</button>
+        <button type="button" class="pick" id="pickFile">📄 Cargar archivos</button>
       </div>
     </div>
     <input type="file" id="fVideo" accept="video/*" multiple />
+    <input type="file" id="fPhoto" accept="image/*" multiple />
     <input type="file" id="fFile" multiple />
     <div class="file" id="fileName"></div>
     <div class="bar" id="bar"><span id="barFill"></span></div>
@@ -616,10 +618,14 @@ const UPLOAD_HTML = `<!DOCTYPE html>
       input.value = '';
       render();
     }
-    document.getElementById('fVideo').addEventListener('change', function () { addFrom(this); });
-    document.getElementById('fFile').addEventListener('change', function () { addFrom(this); });
-    document.getElementById('pickVideo').addEventListener('click', function () { document.getElementById('fVideo').click(); });
-    document.getElementById('pickFile').addEventListener('click', function () { document.getElementById('fFile').click(); });
+    function bind(inputId, btnId) {
+      var input = document.getElementById(inputId);
+      input.addEventListener('change', function () { addFrom(input); });
+      document.getElementById(btnId).addEventListener('click', function () { input.click(); });
+    }
+    bind('fVideo', 'pickVideo');
+    bind('fPhoto', 'pickPhoto');
+    bind('fFile', 'pickFile');
     sendBtn.addEventListener('click', function () {
       if (!selected.length || !conversationId) { msg.className='msg err'; msg.textContent='Falta el archivo o el enlace es inválido.'; return; }
       var fd = new FormData();
