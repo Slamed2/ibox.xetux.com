@@ -681,7 +681,7 @@ export const webappPlugin: FastifyPluginAsync = async (fastify) => {
     }
   });
 
-  // Recibe el archivo subido por el cliente y lo postea a Chatwoot como mensaje entrante
+  // Recibe los archivos subidos por el cliente y los postea a Chatwoot como nota interna (privada)
   fastify.post<{ Querystring: { conversation_id?: string } }>('/api/webapp/upload', async (request, reply) => {
     const conversationId = request.query.conversation_id;
     if (!conversationId || !/^\d+$/.test(conversationId)) {
