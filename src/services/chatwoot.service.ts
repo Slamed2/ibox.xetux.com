@@ -363,34 +363,6 @@ class ChatwootService {
   }
 
   /**
-   * List OPEN conversations with NO team assigned for a given inbox, via Chatwoot's
-   * filter endpoint (team_id is_not_present). Returns only the team-less ("limbo") set
-   * regardless of total inbox volume — scales with team-less count, not with all open
-   * conversations. Used by the auto-assign safety net.
-   * NOTE: the filter endpoint returns { meta, payload } at the TOP level (unlike GET /conversations).
-   */
-  async listOpenTeamlessConversations(inboxId: number): Promise<any[]> {
-    const result: any[] = [];
-    for (let page = 1; page <= 10; page++) {
-      const { data } = await this.client.post(
-        `/conversations/filter?page=${page}`,
-        {
-          payload: [
-            { attribute_key: 'status', filter_operator: 'equal_to', values: ['open'], query_operator: 'and' },
-            { attribute_key: 'inbox_id', filter_operator: 'equal_to', values: [inboxId], query_operator: 'and' },
-            { attribute_key: 'team_id', filter_operator: 'is_not_present', values: [] },
-          ],
-        },
-      );
-      const convs: any[] = data?.payload ?? [];
-      if (convs.length === 0) break;
-      result.push(...convs);
-      if (convs.length < 25) break; // last page
-    }
-    return result;
-  }
-
-  /**
    * Send a bot reply to Chatwoot, finding the conversation by Telegram user ID.
    * Includes the Telegram message_id as source_id so Chatwoot doesn't re-send it.
    */

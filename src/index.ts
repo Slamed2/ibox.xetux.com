@@ -12,7 +12,6 @@ import { telegramPlugin } from './plugins/telegram.plugin.js';
 import { dashboardPlugin } from './plugins/dashboard.plugin.js';
 import { webappPlugin } from './plugins/webapp.plugin.js';
 import { cleanupOldLogs } from './services/execution-log.service.js';
-import { sweepUnattendedConversations, AUTO_ASSIGN_ENABLED, AUTO_ASSIGN_SWEEP_INTERVAL_MINUTES } from './services/auto-assign.service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -54,25 +53,10 @@ const runCleanup = async () => {
 runCleanup(); // Run on startup
 const cleanupInterval = setInterval(runCleanup, config.LOG_CLEANUP_INTERVAL_HOURS * 60 * 60 * 1000);
 
-// Auto-assign safety net — sweep unattended (team-less) conversations to a fallback team
-let autoAssignInterval: NodeJS.Timeout | undefined;
-if (AUTO_ASSIGN_ENABLED) {
-  const runAutoAssign = async () => {
-    try {
-      await sweepUnattendedConversations();
-    } catch (err) {
-      logger.error(err, 'Auto-assign sweep failed');
-    }
-  };
-  autoAssignInterval = setInterval(runAutoAssign, AUTO_ASSIGN_SWEEP_INTERVAL_MINUTES * 60 * 1000);
-  logger.info({ sweepEveryMin: AUTO_ASSIGN_SWEEP_INTERVAL_MINUTES }, 'Auto-assign safety net enabled');
-}
-
 // Graceful shutdown
 const shutdown = async (signal: string) => {
   logger.info(`Received ${signal}, shutting down...`);
   clearInterval(cleanupInterval);
-  if (autoAssignInterval) clearInterval(autoAssignInterval);
   await app.close();
   await pool.end();
   process.exit(0);

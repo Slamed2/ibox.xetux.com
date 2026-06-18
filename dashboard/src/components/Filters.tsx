@@ -24,7 +24,6 @@ const EVENT_TYPES = [
   'chatwoot:assignee_changed',
   'chatwoot:contact_updated',
   'flow:greeting',
-  'flow:auto_assign',
   'webapp:register',
 ];
 
