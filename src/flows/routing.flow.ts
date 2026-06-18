@@ -214,6 +214,49 @@ async function sendConsultoriaVePostAssign(conversationId: number, telegramUserI
   });
 }
 
+/**
+ * Asigna la conversación a un equipo. Caso especial SOPORTE VE (reevaluación de agente):
+ * cuando un cliente re-selecciona Soporte VE y su agente actual SIGUE CONECTADO
+ * (online/busy), se respeta — no se reasigna. Si el agente está offline, no hay agente,
+ * o la conversación viene de otro equipo, se desasigna agente + equipo y se reasigna el
+ * equipo → Chatwoot (auto-assign ON en Soporte VE) toma a un agente disponible.
+ * Para el resto de equipos, asignación normal (sin cambios).
+ */
+async function assignTeamSmart(conversationId: number, teamId: number): Promise<void> {
+  if (teamId !== TEAMS.SOPORTE_VE) {
+    await chatwootService.assignConversation(conversationId, { team_id: teamId });
+    return;
+  }
+
+  // Soporte VE — leer estado actual (equipo + agente)
+  let currentTeamId: number | null = null;
+  let assigneeId: number | undefined;
+  try {
+    const conv = await chatwootService.getConversation(conversationId);
+    currentTeamId = conv?.team_id != null ? Number(conv.team_id) : (conv?.meta?.team?.id ?? null);
+    assigneeId = conv?.meta?.assignee?.id as number | undefined;
+  } catch (err) {
+    logger.warn({ err, conversationId }, 'Soporte VE: no se pudo leer la conversación; se reasigna por defecto');
+  }
+
+  // Ya está en Soporte VE con un agente → respetar si sigue conectado
+  if (currentTeamId === TEAMS.SOPORTE_VE && assigneeId) {
+    const agent = await chatwootService.getAgent(assigneeId);
+    const status = agent?.availability_status;
+    if (status === 'online' || status === 'busy') {
+      logger.info({ conversationId, assigneeId, status }, 'Soporte VE: agente sigue conectado, no se reasigna');
+      return; // se queda con su agente actual
+    }
+    logger.info({ conversationId, assigneeId, status }, 'Soporte VE: agente no conectado, reasignando');
+  }
+
+  // Sin agente, agente offline, o viene de otro equipo → reasignar fresco
+  // (desasignar agente + equipo y reasignar para que Chatwoot tome a un disponible)
+  await chatwootService.assignConversation(conversationId, { assignee_id: null });
+  await chatwootService.assignConversation(conversationId, { team_id: null });
+  await chatwootService.assignConversation(conversationId, { team_id: teamId });
+}
+
 // ─── Team selection (replaces grammY callback handler logic) ────────────────
 
 async function handleTeamSelection(
@@ -248,9 +291,9 @@ async function handleTeamSelection(
       const confirmText = teamConfirmText(selection.teamId, selection.teamLabel, conversationId);
       const confirmTextPlain = teamConfirmTextPlain(selection.teamId, selection.teamLabel, conversationId);
 
-      // Assign + label + telegram send (parallel — all independent)
+      // Assign (con reevaluación de agente para Soporte VE) + label + telegram send
       const [, , sentMsg] = await Promise.all([
-        chatwootService.assignConversation(conversationId, { team_id: selection.teamId }),
+        assignTeamSmart(conversationId, selection.teamId),
         teamLabelTag ? chatwootService.addLabels(conversationId, [teamLabelTag]) : null,
         telegramUserId ? bot.api.sendMessage(telegramUserId, confirmText, { parse_mode: 'Markdown' }) : null,
       ]);
@@ -371,9 +414,9 @@ async function handleDepartmentCommand(
         const confirmText = teamConfirmText(resolved.teamId, resolved.label, conversationId);
         const confirmTextPlain = teamConfirmTextPlain(resolved.teamId, resolved.label, conversationId);
 
-        // Assign + label + telegram send (parallel — all independent)
+        // Assign (con reevaluación de agente para Soporte VE) + label + telegram send
         const [, , sentMsg] = await Promise.all([
-          chatwootService.assignConversation(conversationId, { team_id: resolved.teamId }),
+          assignTeamSmart(conversationId, resolved.teamId),
           teamLabelTag ? chatwootService.addLabels(conversationId, [teamLabelTag]) : null,
           bot.api.sendMessage(telegramUserId, confirmText, { parse_mode: 'Markdown' }),
         ]);
