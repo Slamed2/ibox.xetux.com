@@ -1,8 +1,8 @@
 import { FastifyPluginAsync } from 'fastify';
-import { webhookCallback } from 'grammy';
+import { webhookCallback, InlineKeyboard } from 'grammy';
 import axios from 'axios';
 import { bot, setupTelegramWebhook, registerGroupMigration, getMigratedGroupId } from '../services/telegram.service.js';
-import { keepAliveHttpAgent, keepAliveHttpsAgent } from '../services/chatwoot.service.js';
+import { keepAliveHttpAgent, keepAliveHttpsAgent, chatwootService } from '../services/chatwoot.service.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 export const telegramPlugin: FastifyPluginAsync = async (fastify) => {
@@ -43,6 +43,12 @@ export const telegramPlugin: FastifyPluginAsync = async (fastify) => {
       reply.code(500);
       return { ok: false, error: 'Chatwoot forward failed' };
     }
+
+    // 2b. Capture video thumbnails (incl. >20MB videos Chatwoot can't download).
+    //     Fire-and-forget so it never blocks/breaks the webhook response.
+    void handleVideoThumbnail(update).catch((err) =>
+      logger.error({ err: err?.message }, 'Video thumbnail capture failed'),
+    );
 
     // 2. Process with grammY (our bot logic) — only after Chatwoot confirmed
     const handler = webhookCallback(bot, 'fastify', {
@@ -181,4 +187,106 @@ async function forwardToChatwoot(body: unknown, chatwootUrl: string): Promise<vo
     httpsAgent: keepAliveHttpsAgent,
   });
   logger.debug('Forwarded Telegram update to Chatwoot');
+}
+
+const TELEGRAM_MAX_DOWNLOAD = 20 * 1024 * 1024; // 20 MB — límite de descarga para bots
+
+/**
+ * Cuando llega un VIDEO que supera el límite de descarga de bots (20 MB), Chatwoot
+ * no puede bajarlo y lo guarda como mensaje vacío. Para no perder el video:
+ *  1. Le enviamos al cliente un enlace a la página de subida (sube por HTTP, esquiva
+ *     el límite de Telegram) — y espejamos ese aviso en Chatwoot.
+ *  2. Descargamos la MINIATURA (siempre <20 MB) y la subimos como nota interna,
+ *     para que el agente vea de qué video se trata mientras el cliente sube el real.
+ * También loguea la metadata real del media (tamaño, duración, etc.).
+ */
+async function handleVideoThumbnail(update: any): Promise<void> {
+  const msg = update?.message ?? update?.edited_message;
+  if (!msg) return;
+
+  // Solo media tipo video: video, animation (gif), video_note, o document video/*
+  const media = msg.video ?? msg.animation ?? msg.video_note ?? msg.document;
+  const isVideoish =
+    !!(msg.video ?? msg.animation ?? msg.video_note) ||
+    (msg.document?.mime_type?.startsWith('video/') ?? false);
+  if (!media || !isVideoish) return;
+
+  const fileSize = media.file_size ?? 0;
+  const tooBig = fileSize > TELEGRAM_MAX_DOWNLOAD;
+
+  // Metadata real del media (lo que no logueábamos antes)
+  logger.info(
+    {
+      kind: msg.video ? 'video' : msg.animation ? 'animation' : msg.video_note ? 'video_note' : 'document',
+      fileSize,
+      durationS: media.duration,
+      mime: media.mime_type,
+      fileName: media.file_name,
+      hasThumb: !!(media.thumbnail ?? media.thumb),
+      forwarded: !!(msg.forward_origin ?? msg.forward_from ?? msg.forward_from_chat),
+      tooBig,
+    },
+    'Incoming video media',
+  );
+
+  // Solo actuamos sobre los que Chatwoot NO pudo bajar (>20MB)
+  if (!tooBig) return;
+
+  const telegramUserId = msg.from?.id ?? msg.chat?.id;
+  if (!telegramUserId) return;
+  const conversationId = await chatwootService.findConversationByTelegramUserId(telegramUserId);
+  if (!conversationId) {
+    logger.warn({ telegramUserId }, 'Video thumbnail: no Chatwoot conversation found');
+    return;
+  }
+
+  // 1. Enviar al cliente el enlace de subida (+ espejo en Chatwoot para el agente)
+  const uploadUrl = `${config.WEBAPP_BASE_URL}/upload?conversation_id=${conversationId}`;
+  const clientMsg = '📎 Tu video supera el límite de 20 MB de Telegram. Súbelo aquí para que podamos verlo:';
+  // Abrir en el navegador externo (no mini app): el WebView interno de Telegram en
+  // iOS no deja elegir videos de la galería; Safari sí permite foto o video.
+  const uploadKeyboard = new InlineKeyboard().url('📎 Subir archivo', uploadUrl);
+  try {
+    const sent = await bot.api.sendMessage(telegramUserId, clientMsg, {
+      reply_markup: uploadKeyboard,
+    });
+    await chatwootService.sendMessage(conversationId, {
+      content: `${clientMsg}\n${uploadUrl}`,
+      message_type: 'outgoing',
+      source_id: String(sent.message_id),
+    });
+  } catch (err: any) {
+    logger.error({ err: err?.message, conversationId }, 'Failed to send upload link to client');
+  }
+
+  // 2. Subir la miniatura como nota interna para que el agente vea de qué video se trata
+  const sizeMb = (fileSize / 1048576).toFixed(1);
+  const thumb = media.thumbnail ?? media.thumb;
+
+  // Sin miniatura: al menos dejar la nota con metadata
+  if (!thumb?.file_id) {
+    await chatwootService.sendMessage(conversationId, {
+      content: `⚠️ Video grande recibido (${sizeMb} MB) que supera el límite de 20 MB de Telegram, por eso no se cargó. Sin miniatura disponible.`,
+      message_type: 'outgoing',
+      private: true,
+    });
+    return;
+  }
+
+  // Descargar la miniatura (es chica → getFile funciona) y subirla a Chatwoot
+  const file = await bot.api.getFile(thumb.file_id);
+  const fileUrl = `https://api.telegram.org/file/bot${config.TELEGRAM_BOT_TOKEN}/${file.file_path}`;
+  const resp = await axios.get<ArrayBuffer>(fileUrl, {
+    responseType: 'arraybuffer',
+    timeout: config.CHATWOOT_API_TIMEOUT_MS,
+  });
+  const buffer = Buffer.from(resp.data);
+
+  const note =
+    `⚠️ Video grande recibido: ${sizeMb} MB, ${media.duration ?? '?'}s. ` +
+    `Telegram no permite a los bots descargar archivos >20 MB, por eso el video no se cargó. ` +
+    `Miniatura de referencia ↓`;
+
+  await chatwootService.uploadAttachment(conversationId, buffer, 'thumbnail.jpg', 'image/jpeg', note, true);
+  logger.info({ conversationId, fileSize, telegramUserId }, 'Posted video thumbnail to Chatwoot');
 }

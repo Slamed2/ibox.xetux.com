@@ -20,7 +20,8 @@ import { TtlMap } from '../utils/ttl-map.js';
 // TODO: Configurar keywords y sus team_ids correspondientes
 const KEYWORD_ROUTES: Array<{ keywords: string[]; teamId: number; label: string }> = [];
 
-import { CONSULTORIA_VE_GREETING, DEPARTMENT_SWITCH_HINT } from '../constants/messages.js';
+import { CONSULTORIA_VE_GREETING, CONSULTORIA_VE_OUT_OF_HOURS, DEPARTMENT_SWITCH_HINT } from '../constants/messages.js';
+import { isConsultoriaVeOpen } from '../utils/business-hours.js';
 
 function teamConfirmText(teamId: number, teamLabel: string, conversationId: number): string {
   if (teamId === TEAMS.CONSULTORIA_VE) return CONSULTORIA_VE_GREETING;
@@ -188,6 +189,74 @@ export async function handleMessageCreated(payload: ChatwootWebhookPayload) {
   return { action: 'no_match', content };
 }
 
+/**
+ * Mensajes extra que se envían tras asignar Consultoría VE:
+ * - Si está fuera de horario (hora de Venezuela), avisa que el canal está cerrado.
+ *   El chat YA quedó asignado; el aviso es solo informativo.
+ * - Siempre envía el hint para cambiar de departamento.
+ * Cada mensaje se espeja en Chatwoot con su source_id de Telegram.
+ */
+async function sendConsultoriaVePostAssign(conversationId: number, telegramUserId: number) {
+  if (!isConsultoriaVeOpen()) {
+    const closedMsg = await bot.api.sendMessage(telegramUserId, CONSULTORIA_VE_OUT_OF_HOURS);
+    await chatwootService.sendMessage(conversationId, {
+      content: CONSULTORIA_VE_OUT_OF_HOURS,
+      message_type: 'outgoing',
+      source_id: String(closedMsg.message_id),
+    });
+  }
+
+  const hintMsg = await bot.api.sendMessage(telegramUserId, DEPARTMENT_SWITCH_HINT);
+  await chatwootService.sendMessage(conversationId, {
+    content: DEPARTMENT_SWITCH_HINT,
+    message_type: 'outgoing',
+    source_id: String(hintMsg.message_id),
+  });
+}
+
+/**
+ * Asigna la conversación a un equipo. Caso especial SOPORTE VE (reevaluación de agente):
+ * cuando un cliente re-selecciona Soporte VE y su agente actual SIGUE CONECTADO
+ * (online/busy), se respeta — no se reasigna. Si el agente está offline, no hay agente,
+ * o la conversación viene de otro equipo, se desasigna agente + equipo y se reasigna el
+ * equipo → Chatwoot (auto-assign ON en Soporte VE) toma a un agente disponible.
+ * Para el resto de equipos, asignación normal (sin cambios).
+ */
+async function assignTeamSmart(conversationId: number, teamId: number): Promise<void> {
+  if (teamId !== TEAMS.SOPORTE_VE) {
+    await chatwootService.assignConversation(conversationId, { team_id: teamId });
+    return;
+  }
+
+  // Soporte VE — leer estado actual (equipo + agente)
+  let currentTeamId: number | null = null;
+  let assigneeId: number | undefined;
+  try {
+    const conv = await chatwootService.getConversation(conversationId);
+    currentTeamId = conv?.team_id != null ? Number(conv.team_id) : (conv?.meta?.team?.id ?? null);
+    assigneeId = conv?.meta?.assignee?.id as number | undefined;
+  } catch (err) {
+    logger.warn({ err, conversationId }, 'Soporte VE: no se pudo leer la conversación; se reasigna por defecto');
+  }
+
+  // Ya está en Soporte VE con un agente → respetar si sigue conectado
+  if (currentTeamId === TEAMS.SOPORTE_VE && assigneeId) {
+    const agent = await chatwootService.getAgent(assigneeId);
+    const status = agent?.availability_status;
+    if (status === 'online' || status === 'busy') {
+      logger.info({ conversationId, assigneeId, status }, 'Soporte VE: agente sigue conectado, no se reasigna');
+      return; // se queda con su agente actual
+    }
+    logger.info({ conversationId, assigneeId, status }, 'Soporte VE: agente no conectado, reasignando');
+  }
+
+  // Sin agente, agente offline, o viene de otro equipo → reasignar fresco
+  // (desasignar agente + equipo y reasignar para que Chatwoot tome a un disponible)
+  await chatwootService.assignConversation(conversationId, { assignee_id: null });
+  await chatwootService.assignConversation(conversationId, { team_id: null });
+  await chatwootService.assignConversation(conversationId, { team_id: teamId });
+}
+
 // ─── Team selection (replaces grammY callback handler logic) ────────────────
 
 async function handleTeamSelection(
@@ -222,9 +291,9 @@ async function handleTeamSelection(
       const confirmText = teamConfirmText(selection.teamId, selection.teamLabel, conversationId);
       const confirmTextPlain = teamConfirmTextPlain(selection.teamId, selection.teamLabel, conversationId);
 
-      // Assign + label + telegram send (parallel — all independent)
+      // Assign (con reevaluación de agente para Soporte VE) + label + telegram send
       const [, , sentMsg] = await Promise.all([
-        chatwootService.assignConversation(conversationId, { team_id: selection.teamId }),
+        assignTeamSmart(conversationId, selection.teamId),
         teamLabelTag ? chatwootService.addLabels(conversationId, [teamLabelTag]) : null,
         telegramUserId ? bot.api.sendMessage(telegramUserId, confirmText, { parse_mode: 'Markdown' }) : null,
       ]);
@@ -236,14 +305,9 @@ async function handleTeamSelection(
         ...(sentMsg ? { source_id: String(sentMsg.message_id) } : {}),
       });
 
-      // Send department switch hint as separate message for Consultoría VE
+      // Consultoría VE: aviso fuera de horario (si aplica) + hint de cambio de departamento
       if (selection.teamId === TEAMS.CONSULTORIA_VE && telegramUserId) {
-        const hintMsg = await bot.api.sendMessage(telegramUserId, DEPARTMENT_SWITCH_HINT);
-        await chatwootService.sendMessage(conversationId, {
-          content: DEPARTMENT_SWITCH_HINT,
-          message_type: 'outgoing',
-          source_id: String(hintMsg.message_id),
-        });
+        await sendConsultoriaVePostAssign(conversationId, telegramUserId);
       }
 
       return { action: 'team_assigned', ...selection, conversationId };
@@ -350,9 +414,9 @@ async function handleDepartmentCommand(
         const confirmText = teamConfirmText(resolved.teamId, resolved.label, conversationId);
         const confirmTextPlain = teamConfirmTextPlain(resolved.teamId, resolved.label, conversationId);
 
-        // Assign + label + telegram send (parallel — all independent)
+        // Assign (con reevaluación de agente para Soporte VE) + label + telegram send
         const [, , sentMsg] = await Promise.all([
-          chatwootService.assignConversation(conversationId, { team_id: resolved.teamId }),
+          assignTeamSmart(conversationId, resolved.teamId),
           teamLabelTag ? chatwootService.addLabels(conversationId, [teamLabelTag]) : null,
           bot.api.sendMessage(telegramUserId, confirmText, { parse_mode: 'Markdown' }),
         ]);
@@ -364,14 +428,9 @@ async function handleDepartmentCommand(
           source_id: String(sentMsg.message_id),
         });
 
-        // Send department switch hint as separate message for Consultoría VE
+        // Consultoría VE: aviso fuera de horario (si aplica) + hint de cambio de departamento
         if (resolved.teamId === TEAMS.CONSULTORIA_VE) {
-          const hintMsg = await bot.api.sendMessage(telegramUserId, DEPARTMENT_SWITCH_HINT);
-          await chatwootService.sendMessage(conversationId, {
-            content: DEPARTMENT_SWITCH_HINT,
-            message_type: 'outgoing',
-            source_id: String(hintMsg.message_id),
-          });
+          await sendConsultoriaVePostAssign(conversationId, telegramUserId);
         }
 
         return { action: 'team_assigned', teamId: resolved.teamId, label: resolved.label };

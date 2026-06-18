@@ -15,6 +15,21 @@ import type {
 
 const RETRIABLE_CODES = new Set(['ECONNRESET', 'ETIMEDOUT', 'ECONNABORTED', 'ERR_NETWORK']);
 
+/**
+ * Etiquetas activas: SOLO las de color #0DEFFD se aplican por el bot.
+ * El resto (equipos, países, etc.) se mantienen en Chatwoot pero el bot NO las agrega.
+ * addLabels filtra contra esta lista; cualquier otra etiqueta se ignora silenciosamente.
+ */
+const ACTIVE_LABELS = new Set<string>([
+  'interno',
+  'xetux',
+  'actualizar-version',
+  'auditorias-fiscales',
+  'capacitación-instalación',
+  'desarrollo',
+  'pendientes-consultoría',
+]);
+
 class ChatwootService {
   private client: AxiosInstance;
   private accountId: number;
@@ -98,6 +113,61 @@ class ChatwootService {
     return data;
   }
 
+  /**
+   * Upload one or more files as attachments on a conversation (multipart/form-data).
+   * Bypasses the JSON client because attachments need a multipart body. Used to push
+   * media into Chatwoot that its native channel couldn't (e.g. >20MB Telegram videos).
+   */
+  async uploadAttachments(
+    conversationId: number,
+    files: Array<{ buffer: Buffer; filename: string; mimeType: string }>,
+    content: string,
+    isPrivate = false,
+    messageType: 'incoming' | 'outgoing' = 'outgoing',
+  ) {
+    const form = new FormData();
+    form.append('content', content);
+    form.append('message_type', messageType);
+    if (isPrivate) form.append('private', 'true');
+    for (const f of files) {
+      form.append('attachments[]', new Blob([new Uint8Array(f.buffer)], { type: f.mimeType }), f.filename);
+    }
+
+    try {
+      const { data } = await axios.post(
+        `${config.CHATWOOT_BASE_URL}/api/v1/accounts/${this.accountId}/conversations/${conversationId}/messages`,
+        form,
+        {
+          headers: { api_access_token: config.CHATWOOT_API_TOKEN },
+          timeout: config.CHATWOOT_API_TIMEOUT_MS,
+          httpAgent: keepAliveHttpAgent,
+          httpsAgent: keepAliveHttpsAgent,
+          maxContentLength: Infinity,
+          maxBodyLength: Infinity,
+        },
+      );
+      return data;
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const body = err?.response?.data;
+      const detail = typeof body === 'string' ? body : JSON.stringify(body ?? {});
+      throw new Error(`Chatwoot upload failed (${status ?? '?'}): ${detail.slice(0, 400)}`);
+    }
+  }
+
+  /** Single-file convenience wrapper around uploadAttachments. */
+  async uploadAttachment(
+    conversationId: number,
+    file: Buffer,
+    filename: string,
+    mimeType: string,
+    content: string,
+    isPrivate = false,
+    messageType: 'incoming' | 'outgoing' = 'outgoing',
+  ) {
+    return this.uploadAttachments(conversationId, [{ buffer: file, filename, mimeType }], content, isPrivate, messageType);
+  }
+
   async deleteMessage(conversationId: number, messageId: number) {
     logger.debug({ conversationId, messageId }, 'Deleting message in Chatwoot');
     await this.client.delete(`/conversations/${conversationId}/messages/${messageId}`);
@@ -127,11 +197,17 @@ class ChatwootService {
   }
 
   async addLabels(conversationId: number, labels: string[]) {
+    // Solo se aplican etiquetas activas (#0DEFFD). El resto se ignora.
+    const allowed = labels.filter(l => ACTIVE_LABELS.has(l));
+    if (allowed.length === 0) {
+      logger.debug({ conversationId, labels }, 'addLabels — ninguna etiqueta activa, se omite');
+      return null;
+    }
     return this.withLabelLock(conversationId, async () => {
-      logger.debug({ conversationId, labels }, 'Adding labels');
+      logger.debug({ conversationId, labels: allowed }, 'Adding labels');
       const conversation = await this.getConversation(conversationId);
       const currentLabels = conversation.labels ?? [];
-      const mergedLabels = [...new Set([...currentLabels, ...labels])];
+      const mergedLabels = [...new Set([...currentLabels, ...allowed])];
 
       const { data } = await this.client.post(
         `/conversations/${conversationId}/labels`,
