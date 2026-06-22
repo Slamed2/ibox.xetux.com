@@ -6,7 +6,7 @@ import { withExecutionLog } from './execution-log.service.js';
 import { db } from '../db/connection.js';
 import { botConfig } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
-import { BOT_COMMANDS, GUEST_COMMANDS } from './department-menu.js';
+import { BOT_COMMANDS } from './department-menu.js';
 import { TtlMap } from '../utils/ttl-map.js';
 
 export const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
@@ -123,24 +123,9 @@ export function wasBotAssignment(conversationId: number): boolean {
   return recentBotAssignments.has(conversationId);
 }
 
-// ─── Deep link pending storage ───────────────────────────────────────────────
-
-const pendingDeepLinkXetuxIds = new TtlMap<number, string>(30_000);
-
-export function setPendingDeepLinkXetuxId(telegramUserId: number, xetuxId: string): void {
-  pendingDeepLinkXetuxIds.set(telegramUserId, xetuxId);
-}
-
-export function consumePendingDeepLinkXetuxId(telegramUserId: number): string | null {
-  const value = pendingDeepLinkXetuxIds.get(telegramUserId);
-  if (!value) return null;
-  pendingDeepLinkXetuxIds.delete(telegramUserId);
-  return value;
-}
-
 // ─── Thin grammY handlers ────────────────────────────────────────────────────
 
-// /start — only handles deep link parsing, greeting is deferred to Chatwoot flow
+// /start — greeting is deferred to the Chatwoot conversation_created flow
 bot.command('start', async (ctx) => {
   const text = ctx.message?.text ?? '';
   const userId = ctx.from?.id;
@@ -155,14 +140,6 @@ bot.command('start', async (ctx) => {
       metadata: { chatType: ctx.chat.type, username: ctx.from?.username ?? null },
     },
     async () => {
-      // Deep link: /start XETUXID-VE00029 or XETUXID_MX00023
-      const match = text.match(/XETUXID[-_]+([A-Za-z]{2}\d{5})/);
-      if (match && userId) {
-        const xetuxId = match[1].toUpperCase();
-        setPendingDeepLinkXetuxId(userId, xetuxId);
-        logger.info({ userId, xetuxId }, 'Deep link xetux_id stored, waiting for conversation_created');
-        return { action: 'deep_link_pending', xetuxId };
-      }
       return { handled: 'deferred_to_chatwoot_conversation_created' };
     },
   );
@@ -258,10 +235,10 @@ export async function setupTelegramWebhook(webhookUrl: string) {
   await bot.api.deleteMyCommands({ scope: { type: 'all_private_chats' } });
   await bot.api.deleteMyCommands({ scope: { type: 'all_group_chats' } });
 
-  await bot.api.setMyCommands(GUEST_COMMANDS, { scope: { type: 'default' } });
-  await bot.api.setMyCommands(GUEST_COMMANDS, { scope: { type: 'all_private_chats' } });
-  await bot.api.setMyCommands(GUEST_COMMANDS, { scope: { type: 'all_group_chats' } });
-  logger.info('Default bot commands set to guest menu (registro only) for all scopes');
+  await bot.api.setMyCommands(BOT_COMMANDS, { scope: { type: 'default' } });
+  await bot.api.setMyCommands(BOT_COMMANDS, { scope: { type: 'all_private_chats' } });
+  await bot.api.setMyCommands(BOT_COMMANDS, { scope: { type: 'all_group_chats' } });
+  logger.info('Bot commands set (consultoria/soporte) for all scopes');
 
   await bot.api.setWebhook(webhookUrl, {
     secret_token: config.TELEGRAM_WEBHOOK_SECRET,
@@ -275,30 +252,6 @@ export async function setupTelegramWebhook(webhookUrl: string) {
     ],
   });
   logger.info({ webhookUrl }, 'Telegram webhook configured');
-}
-
-// ─── Per-user command scopes ─────────────────────────────────────────────────
-
-export async function enableUserCommands(telegramChatId: number) {
-  try {
-    await bot.api.setMyCommands(BOT_COMMANDS, {
-      scope: { type: 'chat', chat_id: telegramChatId },
-    });
-    logger.info({ telegramChatId }, 'Department commands enabled for chat');
-  } catch (err) {
-    logger.warn({ telegramChatId, err: (err as Error).message }, 'Failed to set commands — bot may have been removed from chat');
-  }
-}
-
-export async function resetUserCommands(telegramChatId: number) {
-  try {
-    await bot.api.setMyCommands(GUEST_COMMANDS, {
-      scope: { type: 'chat', chat_id: telegramChatId },
-    });
-    logger.info({ telegramChatId }, 'Commands reset to guest menu for chat');
-  } catch (err) {
-    logger.warn({ telegramChatId, err: (err as Error).message }, 'Failed to reset commands — bot may have been removed from chat');
-  }
 }
 
 // ─── Utility ─────────────────────────────────────────────────────────────────
