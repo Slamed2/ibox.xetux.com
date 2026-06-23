@@ -5,7 +5,6 @@ import { handleConversationResolved } from '../flows/closing.flow.js';
 import { handleConversationUpdated } from '../flows/assignment.flow.js';
 import { handleMessageUpdated } from '../flows/message-update.flow.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
-import { resetUserCommands } from '../services/telegram.service.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
@@ -119,18 +118,10 @@ export const chatwootPlugin: FastifyPluginAsync = async (fastify) => {
       }
     }
 
-    // Skip contact_created (unused) and contact_updated unless xetux_id was removed
-    if (event === 'contact_created') {
-      logger.debug({ event }, 'Ignoring contact_created — not used');
+    // contact_created / contact_updated are not used by any flow
+    if (event === 'contact_created' || event === 'contact_updated') {
+      logger.debug({ event }, 'Ignoring contact event — not used');
       return { status: 'ok' };
-    }
-    if (event === 'contact_updated') {
-      const changedAttrs = raw.changed_attributes as any[] | undefined;
-      const hasCustomAttrsChange = changedAttrs?.some((c: any) => c.custom_attributes);
-      if (!hasCustomAttrsChange) {
-        logger.debug({ event }, 'Ignoring contact_updated — no custom_attributes change');
-        return { status: 'ok' };
-      }
     }
 
     const conversationId = payload.conversation?.id ?? (raw.id as number);
@@ -169,23 +160,6 @@ export const chatwootPlugin: FastifyPluginAsync = async (fastify) => {
               case 'message_updated':
                 await handleMessageUpdated(raw);
                 return { action: 'message_updated_flow' };
-
-              case 'contact_updated': {
-                const changedAttrs = raw.changed_attributes as any[] | undefined;
-                const telegramUserId = (raw.additional_attributes as any)?.social_telegram_user_id as number | undefined;
-                if (changedAttrs && telegramUserId) {
-                  const customAttrsChange = changedAttrs.find((c: any) => c.custom_attributes);
-                  if (customAttrsChange) {
-                    const prev = customAttrsChange.custom_attributes?.previous_value ?? {};
-                    const curr = customAttrsChange.custom_attributes?.current_value ?? {};
-                    if (prev.xetux_id && !curr.xetux_id) {
-                      await resetUserCommands(telegramUserId);
-                      return { event: 'contact_updated', action: 'menu_reset', telegramUserId };
-                    }
-                  }
-                }
-                return { event: 'contact_updated', action: 'unhandled' };
-              }
 
               default:
                 return { action: 'unhandled', event };
