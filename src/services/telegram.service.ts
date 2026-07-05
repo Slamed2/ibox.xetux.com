@@ -140,6 +140,11 @@ bot.command('start', async (ctx) => {
       metadata: { chatType: ctx.chat.type, username: ctx.from?.username ?? null },
     },
     async () => {
+      // Clear any stale per-chat command menu so it falls back to the global one
+      // (/consultoria, /soporte). The old flow left /registro pinned per chat.
+      if (ctx.chat?.id) {
+        await bot.api.deleteMyCommands({ scope: { type: 'chat', chat_id: ctx.chat.id } }).catch(() => {});
+      }
       return { handled: 'deferred_to_chatwoot_conversation_created' };
     },
   );
