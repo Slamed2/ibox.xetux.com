@@ -52,6 +52,11 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
       if (telegramUserId) {
         const sentMsg = await bot.api.sendMessage(telegramUserId, WELCOME, { reply_markup: deptKeyboard });
         telegramMessageId = sentMsg.message_id;
+        // Clear any stale per-chat command menu (old flow set /registro for the chat)
+        // so it falls back to the global menu (/consultoria, /soporte).
+        await bot.api
+          .deleteMyCommands({ scope: { type: 'chat', chat_id: telegramUserId } })
+          .catch(() => {});
       }
 
       // Mirror to Chatwoot (text version of the menu)
