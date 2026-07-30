@@ -15,13 +15,51 @@ import { TtlMap } from '../utils/ttl-map.js';
  */
 export const recentlyGreetedConversations = new TtlMap<number, true>(10_000);
 
-const WELCOME_HELLO = `¡Bienvenido a ${config.COMPANY_NAME}! 👋`;
+const WELCOME_HELLO = `¡Hola! Te damos la bienvenida a ${config.COMPANY_NAME}. 👋`;
 // Prompt del menú de departamento (rama "No"; ya se dio la bienvenida antes).
-const DEPARTMENT_PROMPT = '¿Con qué departamento deseas comunicarte?';
+const DEPARTMENT_PROMPT = '¡Perfecto! Cuéntanos, ¿con qué área de Xetux te gustaría comunicarte hoy?';
+
+/**
+ * Envía el saludo de bienvenida + la pregunta de triage (falla de sistema) con
+ * botones Sí / No. Reutilizado por conversation_created y por /start.
+ */
+export async function sendTriageGreeting(conversationId: number, telegramUserId: number | undefined): Promise<number | undefined> {
+  // 1) Mensaje de bienvenida (aparte, sin botones)
+  let helloMsgId: number | undefined;
+  if (telegramUserId) {
+    const helloMsg = await bot.api.sendMessage(telegramUserId, WELCOME_HELLO);
+    helloMsgId = helloMsg.message_id;
+    // Clear any stale per-chat command menu (old flow set /registro for the chat)
+    await bot.api.deleteMyCommands({ scope: { type: 'chat', chat_id: telegramUserId } }).catch(() => {});
+  }
+  await chatwootService.sendMessage(conversationId, {
+    content: WELCOME_HELLO,
+    message_type: 'outgoing',
+    content_attributes: { external_created_at: new Date().toISOString() },
+    ...(helloMsgId ? { source_id: String(helloMsgId) } : {}),
+  });
+
+  // 2) Pregunta de triage de falla de sistema (con botones Sí / No)
+  let telegramMessageId: number | undefined;
+  if (telegramUserId) {
+    const sentMsg = await bot.api.sendMessage(telegramUserId, SYSFAIL_QUESTION, { reply_markup: buildSysfailKeyboard() });
+    telegramMessageId = sentMsg.message_id;
+  }
+  await chatwootService.sendMessage(conversationId, {
+    content: `${SYSFAIL_QUESTION}\n\n🚨 Sí, no puedo vender | ➡️ No, es otra consulta`,
+    message_type: 'outgoing',
+    content_attributes: { external_created_at: new Date().toISOString() },
+    ...(telegramMessageId ? { source_id: String(telegramMessageId) } : {}),
+  });
+
+  conversationNudgeState.set(conversationId, 'sysfail_pending');
+  recentlyGreetedConversations.set(conversationId, true);
+  return telegramMessageId;
+}
 
 /**
  * Envía el menú de departamento (Consultoría / Soporte) y deja la conversación
- * esperando la selección. Reutilizado por la respuesta "No" del triage de falla.
+ * esperando la selección. Reutilizado por la respuesta "No" del triage.
  */
 export async function sendDepartmentMenu(conversationId: number, telegramUserId: number | undefined) {
   let telegramMessageId: number | undefined;
@@ -68,37 +106,7 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
       metadata: { telegramUserId: telegramUserId ?? null },
     },
     async () => {
-      // 1) Mensaje de bienvenida (aparte, sin botones)
-      let helloMsgId: number | undefined;
-      if (telegramUserId) {
-        const helloMsg = await bot.api.sendMessage(telegramUserId, WELCOME_HELLO);
-        helloMsgId = helloMsg.message_id;
-        // Clear any stale per-chat command menu (old flow set /registro for the chat)
-        await bot.api.deleteMyCommands({ scope: { type: 'chat', chat_id: telegramUserId } }).catch(() => {});
-      }
-      await chatwootService.sendMessage(conversation.id, {
-        content: WELCOME_HELLO,
-        message_type: 'outgoing',
-        content_attributes: { external_created_at: new Date().toISOString() },
-        ...(helloMsgId ? { source_id: String(helloMsgId) } : {}),
-      });
-
-      // 2) Pregunta de triage de falla de sistema (con botones Sí / No)
-      let telegramMessageId: number | undefined;
-      if (telegramUserId) {
-        const sentMsg = await bot.api.sendMessage(telegramUserId, SYSFAIL_QUESTION, { reply_markup: buildSysfailKeyboard() });
-        telegramMessageId = sentMsg.message_id;
-      }
-      await chatwootService.sendMessage(conversation.id, {
-        content: `${SYSFAIL_QUESTION}\n\nSí | No`,
-        message_type: 'outgoing',
-        content_attributes: { external_created_at: new Date().toISOString() },
-        ...(telegramMessageId ? { source_id: String(telegramMessageId) } : {}),
-      });
-
-      conversationNudgeState.set(conversation.id, 'sysfail_pending');
-      recentlyGreetedConversations.set(conversation.id, true);
-
+      const telegramMessageId = await sendTriageGreeting(conversation.id, telegramUserId);
       return { greeting: 'sysfail_triage', telegramMessageId };
     },
   );

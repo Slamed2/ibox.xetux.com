@@ -70,7 +70,7 @@ async function handleTeamChange(conversation: any, telegramUserId: number | unde
       const teamName = TEAM_NAMES[currentTeamId] ?? `Equipo #${currentTeamId}`;
       const message = currentTeamId === TEAMS.CONSULTORIA_VE
         ? CONSULTORIA_VE_GREETING
-        : `🔄 Conversación #${conversation.id} transferida a *${teamName}*.\n\nUn agente te atenderá pronto.`;
+        : `🔄 Con el fin de darte la mejor atención, he transferido tu consulta al equipo especializado de *${teamName}*.\nUn agente de esa área tomará tu chat en breve para darle continuidad a tu requerimiento. ¡Gracias por tu paciencia!`;
       const teamLabelTag = TEAM_LABELS[currentTeamId];
 
       // Telegram send + label replace (parallel — independent of each other)
@@ -82,7 +82,7 @@ async function handleTeamChange(conversation: any, telegramUserId: number | unde
       // Sync to Chatwoot (needs telegramMessageId)
       const chatwootContent = currentTeamId === TEAMS.CONSULTORIA_VE
         ? CONSULTORIA_VE_GREETING
-        : `🔄 Conversación #${conversation.id} transferida a ${teamName}. Un agente te atenderá pronto.`;
+        : `🔄 Con el fin de darte la mejor atención, he transferido tu consulta al equipo especializado de ${teamName}.\nUn agente de esa área tomará tu chat en breve para darle continuidad a tu requerimiento. ¡Gracias por tu paciencia!`;
       await chatwootService.sendMessage(conversation.id, {
         content: chatwootContent,
         message_type: 'outgoing',
@@ -135,9 +135,9 @@ async function handleAssigneeChange(conversation: any, telegramUserId: number | 
         ?? (await chatwootService.getAgent(assigneeId))?.name
         ?? 'Un agente';
       const teamName = convTeamId ? (TEAM_NAMES[convTeamId] ?? '') : '';
-      const areaText = teamName ? ` del área de *${teamName}*` : '';
+      const areaText = teamName ? `, del equipo de *${teamName}*` : '';
 
-      const message = `👋 Mi nombre es *${agentName}*${areaText} de ${config.COMPANY_NAME} y estaré encantado de atenderte.`;
+      const message = `👋 ¡Hola! Mi nombre es *${agentName}*${areaText} de ${config.COMPANY_NAME}.\nYa estoy revisando tu caso y con mucho gusto te voy a acompañar para resolverlo hoy mismo. ¿Cómo te encuentras?`;
 
       let telegramMessageId: number | undefined;
       if (telegramUserId) {
@@ -146,7 +146,7 @@ async function handleAssigneeChange(conversation: any, telegramUserId: number | 
       }
 
       await chatwootService.sendMessage(conversation.id, {
-        content: `👋 Mi nombre es ${agentName}${teamName ? ` del área de ${teamName}` : ''} de ${config.COMPANY_NAME} y estaré encantado de atenderte.`,
+        content: `👋 ¡Hola! Mi nombre es ${agentName}${teamName ? `, del equipo de ${teamName}` : ''} de ${config.COMPANY_NAME}.\nYa estoy revisando tu caso y con mucho gusto te voy a acompañar para resolverlo hoy mismo. ¿Cómo te encuentras?`,
         message_type: 'outgoing',
         ...(telegramMessageId ? { source_id: String(telegramMessageId) } : {}),
       });

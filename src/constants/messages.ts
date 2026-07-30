@@ -1,20 +1,20 @@
 // ─── Consultoría Venezuela custom messages ─────────────────────────────────
 
 export const CONSULTORIA_VE_GREETING =
-  '¡Buen día! ☀️ Esperamos que se encuentre muy bien. 😊\n\nLe saluda el Departamento de Consultoría Venezuela Xetux. ¿En qué podemos ayudarle el día de hoy?';
+  '¡Buen día! ☀️ Qué gusto saludarte.\nLe saluda el equipo del Departamento de Consultoría Xetux Venezuela. Estamos aquí para ayudarte a impulsar y optimizar tu negocio. Cuéntanos, ¿en qué podemos acompañarte el día de hoy?';
 
 export const CONSULTORIA_VE_OUT_OF_HOURS =
-  '🕐 En este momento nuestro canal está cerrado.\n\nEl chat está activo de 9:00 am hasta las 6:00 pm, todos los días.\n\nTu solicitud quedó registrada y será atendida por un agente en cuanto retomemos el horario de atención. 😊';
+  '🕐 ¡Gracias por escribirnos a Xetux!\nEn este momento nuestro equipo se encuentra en su descanso. Nuestro horario de atención en vivo es de 9:00 am a 6:00 pm, todos los días.\n\n¡Pero descuida! Tu mensaje ya quedó guardado con prioridad en nuestro sistema. A primera hora al retomar nuestro turno, un especialista te atenderá sin falta. ¡Que tengas un feliz resto del día! 😊';
 
 export const CONSULTORIA_VE_FAREWELL =
-  '¡Hola Estimad@! 👋\nTu solicitud ha sido procesada con éxito. ✅ Estamos atentos a cualquier duda o caso pendiente que puedas tener para ser atendido por nuestro departamento. ¡Siempre listos para ayudarte! 😉 Te deseamos un feliz día. ☀️\n-------\nTu opinión es muy importante para nosotros, por esta razón nos gustaría que nos apoyaras llenando esta breve encuesta: 📝\nhttps://forms.gle/8Tv3jKP5WTziFPqD8\n¡Gracias por comunicarte con @ConsultoriaXetux! 😁';
+  '¡Hola de nuevo! 👋 Nos alegra informarte que tu requerimiento ha sido procesado con éxito. ✅\nPara nosotros es muy importante seguir mejorando. ¿Nos apoyarías respondiendo esta breve encuesta de 1 minuto? https://forms.gle/8Tv3jKP5WTziFPqD8\n¡Gracias por confiar en el equipo de Consultoría Xetux! Que tengas un excelente día. 😁';
 
 // ─── Triage de entrada (falla de sistema) ──────────────────────────────────
 
 export const SYSTEM_FAILURE_APOLOGY =
-  'Lamentamos muchísimo lo sucedido y queremos solucionar el problema cuanto antes. 🙏\n\nEn un momento un agente de Soporte le atenderá.';
+  'Entendemos lo crítico que es esto para tu negocio y ya le dimos máxima prioridad a tu caso.\nUn agente de soporte ya está tomando tu caso. ¡Quédate tranquilo, lo solucionaremos juntos!';
 
 // ─── Shared messages ────────────────────────────────────────────────────────
 
 export const DEPARTMENT_SWITCH_HINT =
-  'Si deseas comunicarte con otro departamento, usa el menú ☰ en la parte inferior.';
+  '(Si necesitas cambiar de área, puedes usar el menú ☰ en la parte inferior).';

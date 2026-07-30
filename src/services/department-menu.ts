@@ -65,13 +65,15 @@ export function buildDepartmentKeyboard(): InlineKeyboard {
 }
 
 // ─── Triage de entrada: falla de sistema ────────────────────────────────────
-export const SYSFAIL_QUESTION = '¿Tiene una falla en el sistema que le impide la venta?';
+export const SYSFAIL_QUESTION =
+  'Para brindarte la atención prioritaria que necesitas, por favor indícanos: ¿Presentas en este momento una falla en el sistema que te impide realizar ventas?';
 
 /** Botones Sí / No para la pregunta de triage de falla de sistema. */
 export function buildSysfailKeyboard(): InlineKeyboard {
   return new InlineKeyboard()
-    .text('Sí', 'sysfail:yes')
-    .text('No', 'sysfail:no');
+    .text('🚨 Sí, no puedo vender', 'sysfail:yes')
+    .row()
+    .text('➡️ No, es otra consulta', 'sysfail:no');
 }
 
 /** Text version of department menu for Chatwoot sync */
