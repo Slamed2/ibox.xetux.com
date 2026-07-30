@@ -153,7 +153,7 @@ bot.command('start', async (ctx) => {
 // Callback queries — only ACK + remove buttons. Business logic in routing.flow.ts
 bot.on('callback_query:data', async (ctx) => {
   await ctx.answerCallbackQuery();
-  if (ctx.callbackQuery.data.startsWith('team:')) {
+  if (ctx.callbackQuery.data.startsWith('team:') || ctx.callbackQuery.data.startsWith('sysfail:')) {
     try {
       await ctx.editMessageReplyMarkup({ reply_markup: { inline_keyboard: [] } });
     } catch {
