@@ -28,6 +28,7 @@ const ACTIVE_LABELS = new Set<string>([
   'capacitación-instalación',
   'desarrollo',
   'pendientes-consultoría',
+  'sin-sistema',
 ]);
 
 class ChatwootService {
@@ -316,6 +317,15 @@ class ChatwootService {
     const { data } = await this.client.post(
       `/conversations/${conversationId}/toggle_status`,
       { status },
+    );
+    return data;
+  }
+
+  async setPriority(conversationId: number, priority: 'urgent' | 'high' | 'medium' | 'low' | null) {
+    logger.debug({ conversationId, priority }, 'Setting conversation priority');
+    const { data } = await this.client.post(
+      `/conversations/${conversationId}/toggle_priority`,
+      { priority },
     );
     return data;
   }

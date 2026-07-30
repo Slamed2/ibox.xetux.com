@@ -9,6 +9,11 @@ export const CONSULTORIA_VE_OUT_OF_HOURS =
 export const CONSULTORIA_VE_FAREWELL =
   '¡Hola Estimad@! 👋\nTu solicitud ha sido procesada con éxito. ✅ Estamos atentos a cualquier duda o caso pendiente que puedas tener para ser atendido por nuestro departamento. ¡Siempre listos para ayudarte! 😉 Te deseamos un feliz día. ☀️\n-------\nTu opinión es muy importante para nosotros, por esta razón nos gustaría que nos apoyaras llenando esta breve encuesta: 📝\nhttps://forms.gle/8Tv3jKP5WTziFPqD8\n¡Gracias por comunicarte con @ConsultoriaXetux! 😁';
 
+// ─── Triage de entrada (falla de sistema) ──────────────────────────────────
+
+export const SYSTEM_FAILURE_APOLOGY =
+  'Lamentamos muchísimo lo sucedido y queremos solucionar el problema cuanto antes. 🙏\n\nEn un momento un agente de Soporte le atenderá.';
+
 // ─── Shared messages ────────────────────────────────────────────────────────
 
 export const DEPARTMENT_SWITCH_HINT =

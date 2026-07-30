@@ -1,12 +1,14 @@
 import { chatwootService } from '../services/chatwoot.service.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
 import { bot, markBotAssignment } from '../services/telegram.service.js';
-import { recentlyGreetedConversations } from './greeting.flow.js';
+import { recentlyGreetedConversations, sendDepartmentMenu } from './greeting.flow.js';
 import {
   TEAMS,
   TEAM_LABELS,
   resolveTeamFromCommand,
   buildDepartmentKeyboard,
+  buildSysfailKeyboard,
+  SYSFAIL_QUESTION,
   VENTAS_ADMIN_ENABLED,
 } from '../services/department-menu.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
@@ -16,7 +18,7 @@ import { TtlMap } from '../utils/ttl-map.js';
 // TODO: Configurar keywords y sus team_ids correspondientes
 const KEYWORD_ROUTES: Array<{ keywords: string[]; teamId: number; label: string }> = [];
 
-import { CONSULTORIA_VE_GREETING, CONSULTORIA_VE_OUT_OF_HOURS, DEPARTMENT_SWITCH_HINT } from '../constants/messages.js';
+import { CONSULTORIA_VE_GREETING, CONSULTORIA_VE_OUT_OF_HOURS, DEPARTMENT_SWITCH_HINT, SYSTEM_FAILURE_APOLOGY } from '../constants/messages.js';
 import { isConsultoriaVeOpen } from '../utils/business-hours.js';
 
 function teamConfirmText(teamId: number, teamLabel: string, conversationId: number): string {
@@ -33,7 +35,7 @@ function teamConfirmTextPlain(teamId: number, teamLabel: string, conversationId:
  * Track nudge state per conversation to send exactly ONE reminder
  * when a user ignores the login button or department menu.
  */
-type NudgeState = 'dept_pending' | 'dept_reminded';
+type NudgeState = 'sysfail_pending' | 'sysfail_reminded' | 'dept_pending' | 'dept_reminded';
 export const conversationNudgeState = new TtlMap<number, NudgeState>(30 * 60_000); // 30 min TTL
 
 const NUDGE_SELECT_DEPARTMENT =
@@ -59,6 +61,15 @@ function extractTeamSelection(content: string): { teamId: number; teamLabel: str
   return { teamId: parseInt(match[1], 10), teamLabel: match[2] };
 }
 
+/**
+ * Extract the answer to the system-failure triage question (Sí / No).
+ * Format: "sysfail:yes" / "sysfail:no" (or "SenderName: sysfail:yes" in groups).
+ */
+function extractSysfailSelection(content: string): 'yes' | 'no' | null {
+  const match = content.match(/(?:^|:\s)sysfail:(yes|no)$/);
+  return match ? (match[1] as 'yes' | 'no') : null;
+}
+
 export async function handleMessageCreated(payload: ChatwootWebhookPayload) {
   const message = payload.message;
   const conversation = payload.conversation;
@@ -80,6 +91,13 @@ export async function handleMessageCreated(payload: ChatwootWebhookPayload) {
   const labels = conversation.labels ?? [];
   if (labels.includes('interno')) {
     logger.debug({ conversationId }, 'Routing: skipping — interno conversation');
+    return;
+  }
+
+  // --- System-failure triage answer (Sí / No) ---
+  const sysfail = extractSysfailSelection(content);
+  if (sysfail) {
+    await handleSysfailSelection(sysfail, conversationId, contactId, telegramUserId, message, payload);
     return;
   }
 
@@ -108,7 +126,7 @@ export async function handleMessageCreated(payload: ChatwootWebhookPayload) {
   }
 
   // --- Delete raw callback data that leaked through ---
-  if (content.startsWith('team:') && message.id) {
+  if ((content.startsWith('team:') || content.startsWith('sysfail:')) && message.id) {
     await chatwootService.deleteMessage(conversationId, message.id as number);
     return;
   }
@@ -116,6 +134,19 @@ export async function handleMessageCreated(payload: ChatwootWebhookPayload) {
   // --- Nudge: one-time reminder for users ignoring the department menu ---
   if (telegramUserId) {
     const nudgeState = conversationNudgeState.get(conversationId);
+
+    if (nudgeState === 'sysfail_pending') {
+      conversationNudgeState.set(conversationId, 'sysfail_reminded');
+
+      const sentMsg = await bot.api.sendMessage(telegramUserId, SYSFAIL_QUESTION, { reply_markup: buildSysfailKeyboard() });
+      await chatwootService.sendMessage(conversationId, {
+        content: `${SYSFAIL_QUESTION}\n\nSí | No`,
+        message_type: 'outgoing',
+        source_id: String(sentMsg.message_id),
+      });
+      logger.info({ conversationId }, 'Nudge: sent sysfail reminder');
+      return;
+    }
 
     if (nudgeState === 'dept_pending') {
       conversationNudgeState.set(conversationId, 'dept_reminded');
@@ -133,7 +164,7 @@ export async function handleMessageCreated(payload: ChatwootWebhookPayload) {
     }
 
     // Already reminded — do nothing
-    if (nudgeState === 'dept_reminded') {
+    if (nudgeState === 'sysfail_reminded' || nudgeState === 'dept_reminded') {
       return;
     }
   }
@@ -222,6 +253,64 @@ async function assignTeamSmart(conversationId: number, teamId: number): Promise<
   await chatwootService.assignConversation(conversationId, { assignee_id: null });
   await chatwootService.assignConversation(conversationId, { team_id: null });
   await chatwootService.assignConversation(conversationId, { team_id: teamId });
+}
+
+// ─── System-failure triage (Sí / No) ───────────────────────────────────────
+
+async function handleSysfailSelection(
+  answer: 'yes' | 'no',
+  conversationId: number,
+  contactId: number | undefined,
+  telegramUserId: number | undefined,
+  message: any,
+  payload: ChatwootWebhookPayload,
+) {
+  await withExecutionLog(
+    {
+      eventType: 'flow:sysfail',
+      source: 'chatwoot_webhook',
+      direction: 'inbound',
+      inputData: { answer, conversationId },
+      conversationId: String(conversationId),
+      contactId: String(contactId ?? ''),
+      metadata: { answer },
+    },
+    async () => {
+      // Delete the raw callback data message from Chatwoot
+      if (message.id) {
+        await chatwootService.deleteMessage(conversationId, message.id as number);
+      }
+      conversationNudgeState.delete(conversationId);
+
+      // NO → sin falla: seguir el flujo normal (menú de departamento)
+      if (answer === 'no') {
+        await sendDepartmentMenu(conversationId, telegramUserId);
+        return { action: 'sysfail_no' };
+      }
+
+      // SÍ → falla de sistema: disculpa + prioridad Urgente + Soporte VE + etiqueta.
+      // markBotAssignment suprime el mensaje de "transferido"; el agente asignado por
+      // el auto-assign de Chatwoot se presenta vía assignment.flow.
+      markBotAssignment(conversationId);
+
+      const sentMsg = telegramUserId
+        ? await bot.api.sendMessage(telegramUserId, SYSTEM_FAILURE_APOLOGY)
+        : null;
+      await chatwootService.sendMessage(conversationId, {
+        content: SYSTEM_FAILURE_APOLOGY,
+        message_type: 'outgoing',
+        ...(sentMsg ? { source_id: String(sentMsg.message_id) } : {}),
+      });
+
+      await chatwootService.setPriority(conversationId, 'urgent');
+      await Promise.all([
+        assignTeamSmart(conversationId, TEAMS.SOPORTE_VE),
+        chatwootService.addLabels(conversationId, ['sin-sistema']),
+      ]);
+
+      return { action: 'sysfail_yes', teamId: TEAMS.SOPORTE_VE };
+    },
+  );
 }
 
 // ─── Team selection (replaces grammY callback handler logic) ────────────────

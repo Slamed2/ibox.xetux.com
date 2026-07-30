@@ -1,7 +1,7 @@
 import { chatwootService } from '../services/chatwoot.service.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
 import { bot } from '../services/telegram.service.js';
-import { buildDepartmentKeyboard, MENU_TEXT } from '../services/department-menu.js';
+import { buildDepartmentKeyboard, buildSysfailKeyboard, SYSFAIL_QUESTION, MENU_TEXT } from '../services/department-menu.js';
 import { conversationNudgeState } from './routing.flow.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { config } from '../config.js';
@@ -16,6 +16,27 @@ import { TtlMap } from '../utils/ttl-map.js';
 export const recentlyGreetedConversations = new TtlMap<number, true>(10_000);
 
 const WELCOME = `¡Bienvenido a ${config.COMPANY_NAME}! 👋\n\n¿Con qué departamento deseas comunicarte?`;
+
+/**
+ * Envía el menú de departamento (Consultoría / Soporte) y deja la conversación
+ * esperando la selección. Reutilizado por la respuesta "No" del triage de falla.
+ */
+export async function sendDepartmentMenu(conversationId: number, telegramUserId: number | undefined) {
+  let telegramMessageId: number | undefined;
+  if (telegramUserId) {
+    const sentMsg = await bot.api.sendMessage(telegramUserId, WELCOME, { reply_markup: buildDepartmentKeyboard() });
+    telegramMessageId = sentMsg.message_id;
+    // Clear any stale per-chat command menu (old flow set /registro for the chat)
+    await bot.api.deleteMyCommands({ scope: { type: 'chat', chat_id: telegramUserId } }).catch(() => {});
+  }
+  await chatwootService.sendMessage(conversationId, {
+    content: `${WELCOME}\n\n${MENU_TEXT}`,
+    message_type: 'outgoing',
+    content_attributes: { external_created_at: new Date().toISOString() },
+    ...(telegramMessageId ? { source_id: String(telegramMessageId) } : {}),
+  });
+  conversationNudgeState.set(conversationId, 'dept_pending');
+}
 
 export async function handleConversationCreated(payload: ChatwootWebhookPayload) {
   const conversation = payload.conversation;
@@ -45,32 +66,27 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
       metadata: { telegramUserId: telegramUserId ?? null },
     },
     async () => {
-      const deptKeyboard = buildDepartmentKeyboard();
+      // Primer mensaje: triage de falla de sistema (Sí / No)
       let telegramMessageId: number | undefined;
-
-      // Send greeting + department buttons via Telegram
       if (telegramUserId) {
-        const sentMsg = await bot.api.sendMessage(telegramUserId, WELCOME, { reply_markup: deptKeyboard });
+        const sentMsg = await bot.api.sendMessage(telegramUserId, SYSFAIL_QUESTION, { reply_markup: buildSysfailKeyboard() });
         telegramMessageId = sentMsg.message_id;
         // Clear any stale per-chat command menu (old flow set /registro for the chat)
-        // so it falls back to the global menu (/consultoria, /soporte).
-        await bot.api
-          .deleteMyCommands({ scope: { type: 'chat', chat_id: telegramUserId } })
-          .catch(() => {});
+        await bot.api.deleteMyCommands({ scope: { type: 'chat', chat_id: telegramUserId } }).catch(() => {});
       }
 
-      // Mirror to Chatwoot (text version of the menu)
+      // Mirror to Chatwoot
       await chatwootService.sendMessage(conversation.id, {
-        content: `${WELCOME}\n\n${MENU_TEXT}`,
+        content: `${SYSFAIL_QUESTION}\n\nSí | No`,
         message_type: 'outgoing',
         content_attributes: { external_created_at: new Date().toISOString() },
         ...(telegramMessageId ? { source_id: String(telegramMessageId) } : {}),
       });
 
-      conversationNudgeState.set(conversation.id, 'dept_pending');
+      conversationNudgeState.set(conversation.id, 'sysfail_pending');
       recentlyGreetedConversations.set(conversation.id, true);
 
-      return { greeting: 'department_menu', telegramMessageId };
+      return { greeting: 'sysfail_triage', telegramMessageId };
     },
   );
 }
