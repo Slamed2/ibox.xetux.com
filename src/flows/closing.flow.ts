@@ -34,7 +34,7 @@ export async function handleConversationResolved(payload: ChatwootWebhookPayload
       logger.info({ conversationId: conversation.id, teamId: conversation.team_id, isConsultoriaVE }, 'Closing: team_id check');
       const farewellMessage = isConsultoriaVE
         ? CONSULTORIA_VE_FAREWELL
-        : `👋 Nos complace informarte que tu requerimiento (Ticket #${conversation.id}) ha sido resuelto y procesado con éxito. ✅\nTu opinión nos ayuda a brindarte siempre el mejor servicio. Nos encantaría saber cómo fue tu experiencia hoy: 📝 ${config.SURVEY_FORM_URL}\n¡Gracias por formar parte de la familia ${config.COMPANY_NAME}! Estamos para servirte. ✨`;
+        : `👋 ¡Tu requerimiento (Ticket #${conversation.id}) ha sido resuelto con éxito!\nNos encantaría conocer tu experiencia para seguir mejorando: ${config.SURVEY_FORM_URL} ¡Gracias por confiar en ${config.COMPANY_NAME}! ✨`;
 
       // Send farewell via Telegram
       const telegramUserId = conversation.contact?.additional_attributes?.social_telegram_user_id as number | undefined;

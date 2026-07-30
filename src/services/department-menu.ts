@@ -45,8 +45,8 @@ export const BOT_COMMANDS = [
 
 // Text representation for Chatwoot sync
 export const MENU_TEXT = VENTAS_ADMIN_ENABLED
-  ? '💼 /consultoria | 🛠 /soporte | 🛒 /ventas | 📋 /administracion'
-  : '💼 /consultoria | 🛠 /soporte';
+  ? '🛠 /soporte | 💼 /consultoria | 🛒 /ventas | 📋 /administracion'
+  : '🛠 /soporte | 💼 /consultoria';
 
 /**
  * Build the inline keyboard for department selection (Venezuela).
@@ -54,8 +54,8 @@ export const MENU_TEXT = VENTAS_ADMIN_ENABLED
  */
 export function buildDepartmentKeyboard(): InlineKeyboard {
   const kb = new InlineKeyboard()
-    .text('💼 Consultoría', `team:${TEAMS.CONSULTORIA_VE}:Consultoría`)
-    .text('🛠 Soporte', `team:${TEAMS.SOPORTE_VE}:Soporte`);
+    .text('🛠 Soporte', `team:${TEAMS.SOPORTE_VE}:Soporte`)
+    .text('💼 Consultoría', `team:${TEAMS.CONSULTORIA_VE}:Consultoría`);
   if (VENTAS_ADMIN_ENABLED) {
     kb.row()
       .text('🛒 Ventas', `team:${TEAMS.VENTAS_VE}:Ventas`)
