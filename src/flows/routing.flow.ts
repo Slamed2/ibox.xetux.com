@@ -1,17 +1,18 @@
 import { chatwootService } from '../services/chatwoot.service.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
 import { bot, markBotAssignment } from '../services/telegram.service.js';
-import { recentlyGreetedConversations, sendDepartmentMenu } from './greeting.flow.js';
+import { recentlyGreetedConversations, sendDepartmentMenu, sendTriageGreeting } from './greeting.flow.js';
 import {
   TEAMS,
   TEAM_LABELS,
+  TEAM_NAMES,
   resolveTeamFromCommand,
   buildDepartmentKeyboard,
   buildSysfailKeyboard,
-  SYSFAIL_QUESTION,
   VENTAS_ADMIN_ENABLED,
 } from '../services/department-menu.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
+import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { TtlMap } from '../utils/ttl-map.js';
 
@@ -23,12 +24,12 @@ import { isConsultoriaVeOpen } from '../utils/business-hours.js';
 
 function teamConfirmText(teamId: number, teamLabel: string, conversationId: number): string {
   if (teamId === TEAMS.CONSULTORIA_VE) return CONSULTORIA_VE_GREETING;
-  return `✅ Conversación #${conversationId} asignada a *${teamLabel}*.\n\nUn agente te atenderá pronto.\n\n${DEPARTMENT_SWITCH_HINT}`;
+  return `✅ ¡Solicitud recibida con éxito! (Ref: #${conversationId})\nTu caso ha sido asignado al equipo de *${teamLabel}*. Un especialista tomará tu conversación en muy poco tiempo para ayudarte.\n\n${DEPARTMENT_SWITCH_HINT}`;
 }
 
 function teamConfirmTextPlain(teamId: number, teamLabel: string, conversationId: number): string {
   if (teamId === TEAMS.CONSULTORIA_VE) return CONSULTORIA_VE_GREETING;
-  return `✅ Conversación #${conversationId} asignada a ${teamLabel}.\n\nUn agente te atenderá pronto.\n\n${DEPARTMENT_SWITCH_HINT}`;
+  return `✅ ¡Solicitud recibida con éxito! (Ref: #${conversationId})\nTu caso ha sido asignado al equipo de ${teamLabel}. Un especialista tomará tu conversación en muy poco tiempo para ayudarte.\n\n${DEPARTMENT_SWITCH_HINT}`;
 }
 
 /**
@@ -38,8 +39,11 @@ function teamConfirmTextPlain(teamId: number, teamLabel: string, conversationId:
 type NudgeState = 'sysfail_pending' | 'sysfail_reminded' | 'dept_pending' | 'dept_reminded';
 export const conversationNudgeState = new TtlMap<number, NudgeState>(30 * 60_000); // 30 min TTL
 
+const NUDGE_SYSFAIL =
+  '👋 ¡Hola de nuevo! Para poder ayudarte rápidamente, por favor indícanos si presentas alguna falla que impida tus ventas en este momento:';
+
 const NUDGE_SELECT_DEPARTMENT =
-  '👋 Para continuar, selecciona el departamento con el que deseas comunicarte:';
+  '👋 ¡Seguimos por aquí! Selecciona el área con la que deseas hablar para conectar con un agente:';
 
 /**
  * Extract a bot command from message content.
@@ -111,8 +115,15 @@ export async function handleMessageCreated(payload: ChatwootWebhookPayload) {
   // --- Bot commands ---
   const command = extractCommand(content);
   if (command) {
-    // /start — greeting is handled by the conversation_created flow
-    if (command === 'start') return;
+    // /start — la bienvenida inicial la maneja el flujo conversation_created.
+    // Si el cliente vuelve a marcar /start con una conversación ya abierta,
+    // re-saludamos e informamos a qué departamento está asignado su caso.
+    if (command === 'start') {
+      // Conversación recién saludada (el /start creó la conversación): no duplicar
+      if (recentlyGreetedConversations.has(conversationId)) return;
+      await handleStartCommand(conversationId, telegramUserId, conversation);
+      return;
+    }
 
     // Skip if greeting flow just handled this conversation (prevents duplicate menus)
     if (recentlyGreetedConversations.has(conversationId)) {
@@ -138,9 +149,9 @@ export async function handleMessageCreated(payload: ChatwootWebhookPayload) {
     if (nudgeState === 'sysfail_pending') {
       conversationNudgeState.set(conversationId, 'sysfail_reminded');
 
-      const sentMsg = await bot.api.sendMessage(telegramUserId, SYSFAIL_QUESTION, { reply_markup: buildSysfailKeyboard() });
+      const sentMsg = await bot.api.sendMessage(telegramUserId, NUDGE_SYSFAIL, { reply_markup: buildSysfailKeyboard() });
       await chatwootService.sendMessage(conversationId, {
-        content: `${SYSFAIL_QUESTION}\n\nSí | No`,
+        content: `${NUDGE_SYSFAIL}\n\n🚨 Sí | ➡️ No`,
         message_type: 'outgoing',
         source_id: String(sentMsg.message_id),
       });
@@ -185,6 +196,52 @@ export async function handleMessageCreated(payload: ChatwootWebhookPayload) {
   }
 
   return { action: 'no_match', content };
+}
+
+/**
+ * /start sobre una conversación ya existente. Si el caso ya tiene un
+ * departamento asignado, re-saludamos e informamos a qué equipo está asignado.
+ * Si todavía no hay equipo (sigue en triage), reenviamos el saludo/triage.
+ */
+async function handleStartCommand(
+  conversationId: number,
+  telegramUserId: number | undefined,
+  conversation: any,
+) {
+  // team_id puede faltar en el payload del webhook → consultar si hace falta
+  let teamId = conversation?.team_id != null ? Number(conversation.team_id) : null;
+  if (teamId == null) {
+    try {
+      const conv = await chatwootService.getConversation(conversationId);
+      teamId = conv?.team_id != null ? Number(conv.team_id) : (conv?.meta?.team?.id ?? null);
+    } catch (err) {
+      logger.warn({ err, conversationId }, '/start: no se pudo leer la conversación');
+    }
+  }
+
+  // Sin equipo asignado → reenviar el saludo + triage completo
+  if (!teamId) {
+    await sendTriageGreeting(conversationId, telegramUserId);
+    return;
+  }
+
+  // Con equipo asignado → re-saludo + estado de asignación
+  const teamName = TEAM_NAMES[teamId] ?? 'nuestro equipo';
+  const markdown = `¡Hola de nuevo! 👋 Te damos la bienvenida a ${config.COMPANY_NAME}.\n\nTu caso ya está registrado y asignado al equipo de *${teamName}*. Un agente lo está atendiendo y continuará contigo en breve. 😊`;
+  const plain = `¡Hola de nuevo! 👋 Te damos la bienvenida a ${config.COMPANY_NAME}.\n\nTu caso ya está registrado y asignado al equipo de ${teamName}. Un agente lo está atendiendo y continuará contigo en breve. 😊`;
+
+  let telegramMessageId: number | undefined;
+  if (telegramUserId) {
+    const sentMsg = await bot.api.sendMessage(telegramUserId, markdown, { parse_mode: 'Markdown' });
+    telegramMessageId = sentMsg.message_id;
+    await bot.api.deleteMyCommands({ scope: { type: 'chat', chat_id: telegramUserId } }).catch(() => {});
+  }
+  await chatwootService.sendMessage(conversationId, {
+    content: plain,
+    message_type: 'outgoing',
+    ...(telegramMessageId ? { source_id: String(telegramMessageId) } : {}),
+  });
+  logger.info({ conversationId, teamId }, '/start: re-saludo con estado de asignación');
 }
 
 /**
@@ -397,7 +454,14 @@ async function handleDepartmentCommand(
 
       // Block disabled departments
       if (!VENTAS_ADMIN_ENABLED && (command === 'ventas' || command === 'administracion')) {
-        await bot.api.sendMessage(telegramUserId, 'Este departamento no está disponible por el momento. Usa /consultoria o /soporte.');
+        const disabledMsg = 'Por el momento ese canal no se encuentra habilitado por este chat.\nSin embargo, podemos ayudarte con gusto a través de nuestras áreas activas. Por favor selecciona:';
+        const sentMsg = await bot.api.sendMessage(telegramUserId, disabledMsg, { reply_markup: buildDepartmentKeyboard() });
+        await chatwootService.sendMessage(conversationId, {
+          content: disabledMsg,
+          message_type: 'outgoing',
+          source_id: String(sentMsg.message_id),
+        });
+        conversationNudgeState.set(conversationId, 'dept_pending');
         return { action: 'department_disabled', command };
       }
 
