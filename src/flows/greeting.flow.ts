@@ -24,6 +24,13 @@ const DEPARTMENT_PROMPT = '¡Perfecto! Cuéntanos, ¿con qué área de Xetux te 
  * botones Sí / No. Reutilizado por conversation_created y por /start.
  */
 export async function sendTriageGreeting(conversationId: number, telegramUserId: number | undefined): Promise<number | undefined> {
+  // Idempotencia: en un chat nuevo, conversation_created y el mensaje /start
+  // pueden disparar el saludo casi a la vez (en cualquier orden). Este
+  // check-and-set es atómico (no hay await entre has() y set()), por lo que
+  // solo el primero en llegar saluda y evitamos el saludo duplicado.
+  if (recentlyGreetedConversations.has(conversationId)) return undefined;
+  recentlyGreetedConversations.set(conversationId, true);
+
   // 1) Mensaje de bienvenida (aparte, sin botones)
   let helloMsgId: number | undefined;
   if (telegramUserId) {
@@ -53,7 +60,6 @@ export async function sendTriageGreeting(conversationId: number, telegramUserId:
   });
 
   conversationNudgeState.set(conversationId, 'sysfail_pending');
-  recentlyGreetedConversations.set(conversationId, true);
   return telegramMessageId;
 }
 
