@@ -16,8 +16,6 @@ import { TtlMap } from '../utils/ttl-map.js';
 export const recentlyGreetedConversations = new TtlMap<number, true>(10_000);
 
 const WELCOME_HELLO = `¡Bienvenido a ${config.COMPANY_NAME}! 👋`;
-// Primer mensaje: bienvenida + pregunta de triage de falla de sistema.
-const TRIAGE_MESSAGE = `${WELCOME_HELLO}\n\n${SYSFAIL_QUESTION}`;
 // Prompt del menú de departamento (rama "No"; ya se dio la bienvenida antes).
 const DEPARTMENT_PROMPT = '¿Con qué departamento deseas comunicarte?';
 
@@ -70,18 +68,29 @@ export async function handleConversationCreated(payload: ChatwootWebhookPayload)
       metadata: { telegramUserId: telegramUserId ?? null },
     },
     async () => {
-      // Primer mensaje: triage de falla de sistema (Sí / No)
-      let telegramMessageId: number | undefined;
+      // 1) Mensaje de bienvenida (aparte, sin botones)
+      let helloMsgId: number | undefined;
       if (telegramUserId) {
-        const sentMsg = await bot.api.sendMessage(telegramUserId, TRIAGE_MESSAGE, { reply_markup: buildSysfailKeyboard() });
-        telegramMessageId = sentMsg.message_id;
+        const helloMsg = await bot.api.sendMessage(telegramUserId, WELCOME_HELLO);
+        helloMsgId = helloMsg.message_id;
         // Clear any stale per-chat command menu (old flow set /registro for the chat)
         await bot.api.deleteMyCommands({ scope: { type: 'chat', chat_id: telegramUserId } }).catch(() => {});
       }
-
-      // Mirror to Chatwoot
       await chatwootService.sendMessage(conversation.id, {
-        content: `${TRIAGE_MESSAGE}\n\nSí | No`,
+        content: WELCOME_HELLO,
+        message_type: 'outgoing',
+        content_attributes: { external_created_at: new Date().toISOString() },
+        ...(helloMsgId ? { source_id: String(helloMsgId) } : {}),
+      });
+
+      // 2) Pregunta de triage de falla de sistema (con botones Sí / No)
+      let telegramMessageId: number | undefined;
+      if (telegramUserId) {
+        const sentMsg = await bot.api.sendMessage(telegramUserId, SYSFAIL_QUESTION, { reply_markup: buildSysfailKeyboard() });
+        telegramMessageId = sentMsg.message_id;
+      }
+      await chatwootService.sendMessage(conversation.id, {
+        content: `${SYSFAIL_QUESTION}\n\nSí | No`,
         message_type: 'outgoing',
         content_attributes: { external_created_at: new Date().toISOString() },
         ...(telegramMessageId ? { source_id: String(telegramMessageId) } : {}),
