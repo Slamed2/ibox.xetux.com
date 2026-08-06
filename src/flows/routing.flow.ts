@@ -277,7 +277,7 @@ async function sendConsultoriaVePostAssign(conversationId: number, telegramUserI
  * equipo → Chatwoot (auto-assign ON en Soporte VE) toma a un agente disponible.
  * Para el resto de equipos, asignación normal (sin cambios).
  */
-async function assignTeamSmart(conversationId: number, teamId: number): Promise<void> {
+export async function assignTeamSmart(conversationId: number, teamId: number): Promise<void> {
   if (teamId !== TEAMS.SOPORTE_VE) {
     await chatwootService.assignConversation(conversationId, { team_id: teamId });
     return;

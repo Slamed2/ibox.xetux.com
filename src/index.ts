@@ -12,6 +12,7 @@ import { telegramPlugin } from './plugins/telegram.plugin.js';
 import { dashboardPlugin } from './plugins/dashboard.plugin.js';
 import { webappPlugin } from './plugins/webapp.plugin.js';
 import { cleanupOldLogs } from './services/execution-log.service.js';
+import { sweepUnassignedConversations } from './flows/auto-assign.flow.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -53,10 +54,23 @@ const runCleanup = async () => {
 runCleanup(); // Run on startup
 const cleanupInterval = setInterval(runCleanup, config.LOG_CLEANUP_INTERVAL_HOURS * 60 * 60 * 1000);
 
+// Auto-asignación a Soporte de conversaciones sin rutear (red de seguridad)
+let autoAssignInterval: NodeJS.Timeout | undefined;
+if (config.AUTO_ASSIGN_ENABLED) {
+  autoAssignInterval = setInterval(() => {
+    void sweepUnassignedConversations();
+  }, config.AUTO_ASSIGN_SWEEP_MINUTES * 60 * 1000);
+  logger.info(
+    { ageMinutes: config.AUTO_ASSIGN_AGE_MINUTES, sweepMinutes: config.AUTO_ASSIGN_SWEEP_MINUTES },
+    'Auto-assign a Soporte habilitado',
+  );
+}
+
 // Graceful shutdown
 const shutdown = async (signal: string) => {
   logger.info(`Received ${signal}, shutting down...`);
   clearInterval(cleanupInterval);
+  if (autoAssignInterval) clearInterval(autoAssignInterval);
   await app.close();
   await pool.end();
   process.exit(0);
