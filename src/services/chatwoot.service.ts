@@ -3,6 +3,7 @@ import { Agent as HttpAgent } from 'node:http';
 import { Agent as HttpsAgent } from 'node:https';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
+import { TtlMap } from '../utils/ttl-map.js';
 
 // Reusable keep-alive agents — avoids TCP+TLS handshake per request
 export const keepAliveHttpAgent = new HttpAgent({ keepAlive: true, maxSockets: config.HTTP_AGENT_MAX_SOCKETS });
@@ -35,6 +36,21 @@ class ChatwootService {
   private client: AxiosInstance;
   private accountId: number;
   private labelLocks = new Map<number, Promise<void>>();
+
+  /**
+   * Caché telegramUserId → conversationId (TTL 1h). Evita recorrer páginas de
+   * conversaciones en cada búsqueda (findConversationByTelegramUserId), que es
+   * la operación que saturaba la CPU de Chatwoot serializando listas enormes.
+   * Se refresca en cada mensaje entrante (ver cacheConversationForTelegramUser).
+   */
+  private conversationByTgUser = new TtlMap<number, number>(60 * 60 * 1000);
+
+  /** Registra la conversación activa de un usuario de Telegram para búsquedas O(1). */
+  cacheConversationForTelegramUser(telegramUserId: number, conversationId: number): void {
+    if (telegramUserId && conversationId) {
+      this.conversationByTgUser.set(telegramUserId, conversationId);
+    }
+  }
 
   /**
    * Serialize label operations per conversation to prevent race conditions.
@@ -335,6 +351,11 @@ class ChatwootService {
    * Searches open conversations matching social_telegram_user_id in sender attributes.
    */
   async findConversationByTelegramUserId(telegramUserId: number): Promise<number | null> {
+    // Fast path: caché O(1). Evita recorrer páginas de conversaciones (operación
+    // muy costosa para Chatwoot: serializa listas enormes → satura la CPU).
+    const cached = this.conversationByTgUser.get(telegramUserId);
+    if (cached) return cached;
+
     try {
       // Search open conversations (page by page if needed)
       for (let page = 1; page <= 5; page++) {
@@ -348,6 +369,7 @@ class ChatwootService {
         for (const conv of conversations) {
           const senderTgId = conv?.meta?.sender?.additional_attributes?.social_telegram_user_id;
           if (senderTgId === telegramUserId) {
+            this.cacheConversationForTelegramUser(telegramUserId, conv.id);
             return conv.id;
           }
         }
@@ -361,6 +383,7 @@ class ChatwootService {
       for (const conv of pendingConvs) {
         const senderTgId = conv?.meta?.sender?.additional_attributes?.social_telegram_user_id;
         if (senderTgId === telegramUserId) {
+          this.cacheConversationForTelegramUser(telegramUserId, conv.id);
           return conv.id;
         }
       }
