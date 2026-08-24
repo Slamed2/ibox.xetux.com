@@ -91,6 +91,10 @@ export async function handleMessageCreated(payload: ChatwootWebhookPayload) {
   const contactId = contact?.id;
   const telegramUserId = contact?.additional_attributes?.social_telegram_user_id as number | undefined;
 
+  // Mantener caliente el caché telegramUserId → conversationId para que las
+  // búsquedas (ediciones, envíos) sean O(1) y no recorran listas en Chatwoot.
+  if (telegramUserId) chatwootService.cacheConversationForTelegramUser(telegramUserId, conversationId);
+
   // Skip all automations for conversations labeled "interno"
   const labels = conversation.labels ?? [];
   if (labels.includes('interno')) {
