@@ -52,8 +52,9 @@ export async function handleConversationResolved(payload: ChatwootWebhookPayload
         ...(telegramMessageId ? { source_id: String(telegramMessageId) } : {}),
       });
 
-      // Generate AI summary of the conversation
-      const messages = await chatwootService.getMessages(conversation.id);
+      // Generate AI summary of the conversation (últimas ~300 mensajes; evita
+      // escanear todo el historial de conversaciones enormes → saturaría Chatwoot)
+      const messages = await chatwootService.getMessages(conversation.id, 15);
       const summary = await summarizeConversation(messages);
 
       // Save summary: internal note + custom attrs (parallel — independent of each other)

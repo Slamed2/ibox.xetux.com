@@ -200,7 +200,9 @@ class ChatwootService {
   }
 
   async findMessageBySourceId(conversationId: number, sourceId: string) {
-    const messages = await this.getMessages(conversationId);
+    // Las ediciones son casi siempre a mensajes recientes: solo revisamos las
+    // últimas 2 páginas (~40 mensajes) en vez de recorrer todo el historial.
+    const messages = await this.getMessages(conversationId, 2);
     return messages.find((m: any) => String(m.source_id) === sourceId) ?? null;
   }
 
@@ -274,11 +276,17 @@ class ChatwootService {
     return data;
   }
 
-  async getMessages(conversationId: number) {
+  /**
+   * Obtiene mensajes de una conversación (de más reciente a más antiguo).
+   * `maxPages` acota cuántas páginas (20 c/u) se piden; sin él, recorre TODO el
+   * historial (puede ser costosísimo en conversaciones grandes → satura Chatwoot).
+   */
+  async getMessages(conversationId: number, maxPages?: number) {
     const messages: any[] = [];
     let before: number | undefined;
+    let page = 0;
 
-    // Paginate through all messages
+    // Paginate through messages (bounded by maxPages if provided)
     while (true) {
       const params: Record<string, unknown> = {};
       if (before) params.before = before;
@@ -289,7 +297,9 @@ class ChatwootService {
 
       messages.push(...payload);
       before = payload[payload.length - 1]?.id;
+      page++;
       if (payload.length < 20) break; // Less than a full page means we're done
+      if (maxPages && page >= maxPages) break; // Bounded lookup
     }
 
     return messages;
