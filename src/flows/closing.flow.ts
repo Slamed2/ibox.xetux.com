@@ -13,6 +13,22 @@ import {
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 
+/**
+ * created_at (epoch segundos) del último mensaje ENTRANTE, o null si no hay.
+ * La API devuelve message_type numérico (0 = incoming) y el webhook lo manda
+ * como cadena, así que aceptamos las dos formas.
+ */
+function ultimoMensajeEntranteTs(messages: unknown[]): number | null {
+  let ts: number | null = null;
+  for (const m of messages as Array<Record<string, unknown>>) {
+    const tipo = m?.message_type;
+    if (tipo !== 0 && tipo !== 'incoming') continue;
+    const c = Number(m?.created_at);
+    if (Number.isFinite(c) && (ts === null || c > ts)) ts = c;
+  }
+  return ts;
+}
+
 const CIERRE_SIN_MENSAJE = ['interno', 'cierre-interno'];
 
 /**
@@ -56,6 +72,27 @@ export async function handleConversationResolved(payload: ChatwootWebhookPayload
       contactId: String(conversation.contact?.id),
     },
     async () => {
+      // Traemos los mensajes ANTES de despedir: hacen falta para el resumen y
+      // también para decidir si toca despedirse. Reabrir y volver a cerrar sin
+      // que el cliente haya dicho nada no debe mandarle una segunda despedida
+      // (pasó el 29-ago-2026 en la conversación 31993: dos en 13 segundos).
+      // Pero si el cliente sí volvió a escribir, la conversación es nueva y su
+      // cierre sí merece despedida.
+      const messages = await chatwootService.getMessages(conversation.id, 15);
+
+      const despedidaPrevia = conversation.custom_attributes?.despedida_enviada_at;
+      const despedidaPreviaTs =
+        typeof despedidaPrevia === 'string' ? Math.floor(Date.parse(despedidaPrevia) / 1000) : NaN;
+      const entranteTs = ultimoMensajeEntranteTs(messages);
+
+      if (Number.isFinite(despedidaPreviaTs) && (entranteTs === null || entranteTs <= despedidaPreviaTs)) {
+        logger.info(
+          { conversationId: conversation.id, despedidaPrevia, entranteTs },
+          'Closing: ya se despidió y el cliente no ha escrito desde entonces — se omite',
+        );
+        return { farewell: 'skipped_duplicate', aiSummary: false };
+      }
+
       const farewellMessage = elegirDespedida(conversation, labels);
       logger.info(
         { conversationId: conversation.id, teamId: conversation.team_id, labels },
@@ -78,9 +115,8 @@ export async function handleConversationResolved(payload: ChatwootWebhookPayload
         ...(telegramMessageId ? { source_id: String(telegramMessageId) } : {}),
       });
 
-      // Generate AI summary of the conversation (últimas ~300 mensajes; evita
-      // escanear todo el historial de conversaciones enormes → saturaría Chatwoot)
-      const messages = await chatwootService.getMessages(conversation.id, 15);
+      // Resumen IA sobre los mensajes ya traídos arriba (acotados a ~300 para no
+      // escanear el historial completo de conversaciones enormes).
       const summary = await summarizeConversation(messages);
 
       // Save summary: internal note + custom attrs (parallel — independent of each other)
@@ -91,7 +127,9 @@ export async function handleConversationResolved(payload: ChatwootWebhookPayload
           message_type: 'outgoing',
         }),
         chatwootService.updateConversationCustomAttributes(conversation.id, {
+          ...(conversation.custom_attributes ?? {}),
           resumen_de_ia: summary,
+          despedida_enviada_at: new Date().toISOString(),
         }),
       ]);
 
