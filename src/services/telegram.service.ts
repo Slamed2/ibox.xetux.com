@@ -1,4 +1,5 @@
 import { Bot } from 'grammy';
+import { apiThrottler } from '@grammyjs/transformer-throttler';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { chatwootService } from './chatwoot.service.js';
@@ -61,6 +62,12 @@ bot.api.config.use(async (prev, method, payload, signal) => {
   }
   throw lastError;
 });
+
+// Throttler — espacia los envíos para NO exceder los límites de Telegram
+// (≈30 msg/seg global, ~1 msg/seg por chat, 20 msg/min por grupo). Evita los
+// errores 429 "Too Many Requests". Se registra después del retry para que cada
+// reintento también quede paceado.
+bot.api.config.use(apiThrottler());
 
 // ─── Group migration infrastructure ─────────────────────────────────────────
 
