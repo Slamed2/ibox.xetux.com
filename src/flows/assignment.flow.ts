@@ -6,6 +6,7 @@ import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { CONSULTORIA_VE_GREETING, DEPARTMENT_SWITCH_HINT } from '../constants/messages.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
+import { assignTeamSmart } from './routing.flow.js';
 
 export async function handleConversationUpdated(payload: ChatwootWebhookPayload) {
   const conversation = payload.conversation;
@@ -32,6 +33,16 @@ export async function handleConversationUpdated(payload: ChatwootWebhookPayload)
 
   const telegramUserId = conversation.contact?.additional_attributes?.social_telegram_user_id as number | undefined;
 
+  // Pospuesto que se reactiva (el cliente volvió a escribir o venció el plazo)
+  const statusChange = changedAttrs.find((attr) => 'status' in attr);
+  if (
+    statusChange &&
+    statusChange.status.previous_value === 'snoozed' &&
+    statusChange.status.current_value === 'open'
+  ) {
+    scheduleSnoozedReassign(conversation.id);
+  }
+
   // Handle team change
   const teamChange = changedAttrs.find((attr) => 'team_id' in attr);
   if (teamChange) {
@@ -53,6 +64,70 @@ export async function handleConversationUpdated(payload: ChatwootWebhookPayload)
       await handleAssigneeChange(conversation, telegramUserId, currentAssigneeId, payload);
     }
   }
+}
+
+// ─── Pospuesto reactivado → agente disponible ───────────────────────────────
+//
+// Al posponer, el agente se quita el chat para que, cuando el cliente vuelva,
+// lo tome quien esté conectado. Con los PENDIENTES eso lo hace la regla 10 de
+// Chatwoot (→ n8n), pero con los POSPUESTOS no llega a dispararse: Chatwoot
+// reabre el chat al entrar el mensaje y la regla ya lo ve «abierto». Aquí se
+// detecta el paso pospuesto → abierto y se vuelve a asignar el chat a su mismo
+// equipo para que Chatwoot elija un agente conectado. Se espera unos segundos y
+// se relee la conversación, por si otra vía ya le puso agente.
+
+const SNOOZED_REASSIGN_DELAY_MS = 8000;
+const pendingSnoozedReassign = new Set<number>();
+
+function scheduleSnoozedReassign(conversationId: number) {
+  if (pendingSnoozedReassign.has(conversationId)) return;
+  pendingSnoozedReassign.add(conversationId);
+  const timer = setTimeout(() => {
+    pendingSnoozedReassign.delete(conversationId);
+    void reassignReactivatedSnoozed(conversationId).catch((err) =>
+      logger.error({ err, conversationId }, 'Pospuesto reactivado: falló la reasignación'),
+    );
+  }, SNOOZED_REASSIGN_DELAY_MS);
+  timer.unref();
+}
+
+async function reassignReactivatedSnoozed(conversationId: number) {
+  await withExecutionLog(
+    {
+      eventType: 'flow:snoozed_reactivated',
+      source: 'chatwoot_webhook',
+      direction: 'inbound',
+      inputData: { conversationId },
+      conversationId: String(conversationId),
+    },
+    async () => {
+      const conv = await chatwootService.getConversation(conversationId);
+      if (conv?.status !== 'open') return { action: 'skipped', reason: 'no_abierta', status: conv?.status };
+      if (conv?.meta?.assignee?.id) return { action: 'skipped', reason: 'ya_tiene_agente' };
+      const labels: unknown = conv?.labels ?? [];
+      if (Array.isArray(labels) && labels.includes('interno')) return { action: 'skipped', reason: 'interno' };
+
+      const teamId: number | null = conv?.team_id != null ? Number(conv.team_id) : (conv?.meta?.team?.id ?? null);
+
+      // Sin equipo o en Soporte VE: la misma lógica que el resto del bot.
+      if (teamId == null || teamId === TEAMS.SOPORTE_VE) {
+        markBotAssignment(conversationId); // sin «te transferí…»: el cliente sigue su caso
+        await assignTeamSmart(conversationId, TEAMS.SOPORTE_VE);
+        logger.info({ conversationId, teamId }, 'Pospuesto reactivado → Soporte VE (agente conectado)');
+        return { action: 'reassigned', teamId: TEAMS.SOPORTE_VE };
+      }
+
+      // Otro equipo: solo si reparte solo; si no (p. ej. Consultoría VE), se deja.
+      if (!(await chatwootService.teamAllowsAutoAssign(teamId))) {
+        return { action: 'skipped', reason: 'equipo_sin_autoasignacion', teamId };
+      }
+      markBotAssignment(conversationId);
+      await chatwootService.assignConversation(conversationId, { team_id: null });
+      await chatwootService.assignConversation(conversationId, { team_id: teamId });
+      logger.info({ conversationId, teamId }, 'Pospuesto reactivado → mismo equipo (agente conectado)');
+      return { action: 'reassigned', teamId };
+    },
+  );
 }
 
 async function handleTeamChange(conversation: any, telegramUserId: number | undefined, currentTeamId: number, payload: ChatwootWebhookPayload) {

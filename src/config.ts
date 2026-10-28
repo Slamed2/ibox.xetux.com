@@ -27,11 +27,13 @@ export const config = cleanEnv(process.env, {
   CHATWOOT_API_RETRIES: num({ default: 3 }),
   HTTP_AGENT_MAX_SOCKETS: num({ default: 15 }),
 
-  // Auto-asignación a Soporte de conversaciones sin rutear.
-  // Apagado por defecto: activar con AUTO_ASSIGN_ENABLED=true cuando la
-  // plataforma esté estable (el barrido lista conversaciones cada N min).
-  AUTO_ASSIGN_ENABLED: bool({ default: false }),
+  // Auto-asignación a Soporte de conversaciones sin rutear (cliente que no
+  // eligió departamento). Encendida por defecto desde el 28-oct-2026: el barrido
+  // es 1 página de conversaciones cada N min. Apagar con AUTO_ASSIGN_ENABLED=false.
+  AUTO_ASSIGN_ENABLED: bool({ default: true }),
   AUTO_ASSIGN_AGE_MINUTES: num({ default: 10 }),   // antigüedad (desde creación) para asignar
+  AUTO_ASSIGN_MAX_AGE_HOURS: num({ default: 24 }), // más antiguas no se tocan: el cliente recibiría
+                                                   // «te transferí…» días después de escribir
   AUTO_ASSIGN_SWEEP_MINUTES: num({ default: 2 }),  // frecuencia del barrido
 
   // Webapp

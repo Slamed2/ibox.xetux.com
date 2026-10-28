@@ -44,6 +44,7 @@ class ChatwootService {
    * Se refresca en cada mensaje entrante (ver cacheConversationForTelegramUser).
    */
   private conversationByTgUser = new TtlMap<number, number>(60 * 60 * 1000);
+  private teamAutoAssign = new TtlMap<number, boolean>(10 * 60 * 1000);
 
   /** Registra la conversación activa de un usuario de Telegram para búsquedas O(1). */
   cacheConversationForTelegramUser(telegramUserId: number, conversationId: number): void {
@@ -321,6 +322,19 @@ class ChatwootService {
       logger.warn({ agentId }, 'Could not fetch agent info');
       return null;
     }
+  }
+
+  /**
+   * ¿El equipo reparte solo sus conversaciones (allow_auto_assign)? Si no, de
+   * nada sirve reasignárselo para que Chatwoot elija agente. Caché de 10 min.
+   */
+  async teamAllowsAutoAssign(teamId: number): Promise<boolean> {
+    const cached = this.teamAutoAssign.get(teamId);
+    if (cached !== undefined) return cached;
+    const { data } = await this.client.get(`/teams/${teamId}`);
+    const allows = data?.allow_auto_assign === true;
+    this.teamAutoAssign.set(teamId, allows);
+    return allows;
   }
 
   async getContact(contactId: number) {
