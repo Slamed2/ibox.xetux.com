@@ -33,6 +33,10 @@ export const CONSULTORIA_VE_FAREWELL =
 export const SYSTEM_FAILURE_APOLOGY =
   'Entendemos lo crítico que es esto para tu negocio y ya le dimos máxima prioridad a tu caso.\nUn agente de soporte ya está tomando tu caso. ¡Quédate tranquilo, lo solucionaremos juntos!';
 
+// Contingencia IGTF (nov-2026): solicitud de cambio de status de la impresora fiscal.
+export const FISCAL_STATUS_RECEIVED =
+  '🧾 Recibimos tu solicitud para modificar el status de tu impresora fiscal.\nUn agente de soporte ya tiene tu caso y te escribirá en breve para hacer el ajuste. ¡Gracias por tu paciencia!';
+
 // ─── Shared messages ────────────────────────────────────────────────────────
 
 export const DEPARTMENT_SWITCH_HINT =

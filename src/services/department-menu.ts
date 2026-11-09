@@ -68,10 +68,23 @@ export function buildDepartmentKeyboard(): InlineKeyboard {
 export const SYSFAIL_QUESTION =
   'Para brindarte la atención prioritaria que necesitas, por favor indícanos: ¿Presentas en este momento una falla en el sistema que te impide realizar ventas?';
 
-/** Botones Sí / No para la pregunta de triage de falla de sistema. */
+// Contingencia IGTF (nov-2026): con la reducción de contribuyentes especiales
+// llegan muchos clientes a pedir el cambio de status de su impresora fiscal y,
+// sin una opción propia, marcaban «Sí, no puedo vender» y llenaban el KDS de
+// «sin sistema». Temporal: quitar el botón cuando pase la contingencia.
+export const FISCAL_STATUS_LABEL = 'actualizacion-ordinario';
+const FISCAL_STATUS_BUTTON = '🧾 Impresora fiscal: cambiar status';
+
+/** Texto de las opciones del triage para el espejo en Chatwoot. */
+export const SYSFAIL_OPTIONS_TEXT =
+  `🚨 Sí, no puedo vender | ${FISCAL_STATUS_BUTTON} | ➡️ No, es otra consulta`;
+
+/** Botones del triage de entrada: falla de sistema, status fiscal u otra consulta. */
 export function buildSysfailKeyboard(): InlineKeyboard {
   return new InlineKeyboard()
     .text('🚨 Sí, no puedo vender', 'sysfail:yes')
+    .row()
+    .text(FISCAL_STATUS_BUTTON, 'sysfail:fiscal')
     .row()
     .text('➡️ No, es otra consulta', 'sysfail:no');
 }

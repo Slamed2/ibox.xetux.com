@@ -1,7 +1,7 @@
 import { chatwootService } from '../services/chatwoot.service.js';
 import { withExecutionLog } from '../services/execution-log.service.js';
 import { bot } from '../services/telegram.service.js';
-import { buildDepartmentKeyboard, buildSysfailKeyboard, SYSFAIL_QUESTION, MENU_TEXT } from '../services/department-menu.js';
+import { buildDepartmentKeyboard, buildSysfailKeyboard, SYSFAIL_QUESTION, SYSFAIL_OPTIONS_TEXT, MENU_TEXT } from '../services/department-menu.js';
 import { conversationNudgeState } from './routing.flow.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { config } from '../config.js';
@@ -53,7 +53,7 @@ export async function sendTriageGreeting(conversationId: number, telegramUserId:
     telegramMessageId = sentMsg.message_id;
   }
   await chatwootService.sendMessage(conversationId, {
-    content: `${SYSFAIL_QUESTION}\n\n🚨 Sí, no puedo vender | ➡️ No, es otra consulta`,
+    content: `${SYSFAIL_QUESTION}\n\n${SYSFAIL_OPTIONS_TEXT}`,
     message_type: 'outgoing',
     content_attributes: { external_created_at: new Date().toISOString() },
     ...(telegramMessageId ? { source_id: String(telegramMessageId) } : {}),

@@ -9,6 +9,8 @@ import {
   resolveTeamFromCommand,
   buildDepartmentKeyboard,
   buildSysfailKeyboard,
+  SYSFAIL_OPTIONS_TEXT,
+  FISCAL_STATUS_LABEL,
   VENTAS_ADMIN_ENABLED,
 } from '../services/department-menu.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
@@ -19,7 +21,7 @@ import { TtlMap } from '../utils/ttl-map.js';
 // TODO: Configurar keywords y sus team_ids correspondientes
 const KEYWORD_ROUTES: Array<{ keywords: string[]; teamId: number; label: string }> = [];
 
-import { CONSULTORIA_VE_GREETING, CONSULTORIA_VE_OUT_OF_HOURS, DEPARTMENT_SWITCH_HINT, SYSTEM_FAILURE_APOLOGY } from '../constants/messages.js';
+import { CONSULTORIA_VE_GREETING, CONSULTORIA_VE_OUT_OF_HOURS, DEPARTMENT_SWITCH_HINT, SYSTEM_FAILURE_APOLOGY, FISCAL_STATUS_RECEIVED } from '../constants/messages.js';
 import { isConsultoriaVeOpen } from '../utils/business-hours.js';
 
 function teamConfirmText(teamId: number, teamLabel: string, conversationId: number): string {
@@ -65,13 +67,15 @@ function extractTeamSelection(content: string): { teamId: number; teamLabel: str
   return { teamId: parseInt(match[1], 10), teamLabel: match[2] };
 }
 
+type SysfailAnswer = 'yes' | 'no' | 'fiscal';
+
 /**
- * Extract the answer to the system-failure triage question (Sí / No).
- * Format: "sysfail:yes" / "sysfail:no" (or "SenderName: sysfail:yes" in groups).
+ * Extract the answer to the entry triage question (Sí / No / status fiscal).
+ * Format: "sysfail:yes" / "sysfail:no" / "sysfail:fiscal" (or "SenderName: sysfail:yes" in groups).
  */
-function extractSysfailSelection(content: string): 'yes' | 'no' | null {
-  const match = content.match(/(?:^|:\s)sysfail:(yes|no)$/);
-  return match ? (match[1] as 'yes' | 'no') : null;
+function extractSysfailSelection(content: string): SysfailAnswer | null {
+  const match = content.match(/(?:^|:\s)sysfail:(yes|no|fiscal)$/);
+  return match ? (match[1] as SysfailAnswer) : null;
 }
 
 export async function handleMessageCreated(payload: ChatwootWebhookPayload) {
@@ -155,7 +159,7 @@ export async function handleMessageCreated(payload: ChatwootWebhookPayload) {
 
       const sentMsg = await bot.api.sendMessage(telegramUserId, NUDGE_SYSFAIL, { reply_markup: buildSysfailKeyboard() });
       await chatwootService.sendMessage(conversationId, {
-        content: `${NUDGE_SYSFAIL}\n\n🚨 Sí | ➡️ No`,
+        content: `${NUDGE_SYSFAIL}\n\n${SYSFAIL_OPTIONS_TEXT}`,
         message_type: 'outgoing',
         source_id: String(sentMsg.message_id),
       });
@@ -319,7 +323,7 @@ export async function assignTeamSmart(conversationId: number, teamId: number): P
 // ─── System-failure triage (Sí / No) ───────────────────────────────────────
 
 async function handleSysfailSelection(
-  answer: 'yes' | 'no',
+  answer: SysfailAnswer,
   conversationId: number,
   contactId: number | undefined,
   telegramUserId: number | undefined,
@@ -347,6 +351,25 @@ async function handleSysfailSelection(
       if (answer === 'no') {
         await sendDepartmentMenu(conversationId, telegramUserId);
         return { action: 'sysfail_no' };
+      }
+
+      // STATUS FISCAL (contingencia IGTF) → Soporte VE con su propia etiqueta,
+      // sin prioridad urgente ni «sin-sistema»: no es una caída del sistema.
+      if (answer === 'fiscal') {
+        markBotAssignment(conversationId);
+        const sentFiscal = telegramUserId
+          ? await bot.api.sendMessage(telegramUserId, FISCAL_STATUS_RECEIVED)
+          : null;
+        await chatwootService.sendMessage(conversationId, {
+          content: FISCAL_STATUS_RECEIVED,
+          message_type: 'outgoing',
+          ...(sentFiscal ? { source_id: String(sentFiscal.message_id) } : {}),
+        });
+        await Promise.all([
+          assignTeamSmart(conversationId, TEAMS.SOPORTE_VE),
+          chatwootService.addLabels(conversationId, [FISCAL_STATUS_LABEL]),
+        ]);
+        return { action: 'sysfail_fiscal', teamId: TEAMS.SOPORTE_VE };
       }
 
       // SÍ → falla de sistema: disculpa + prioridad Urgente + Soporte VE + etiqueta.

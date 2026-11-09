@@ -30,6 +30,7 @@ const ACTIVE_LABELS = new Set<string>([
   'desarrollo',
   'pendientes-consultoría',
   'sin-sistema',
+  'actualizacion-ordinario', // contingencia IGTF (nov-2026), ver FISCAL_STATUS_LABEL
 ]);
 
 class ChatwootService {
