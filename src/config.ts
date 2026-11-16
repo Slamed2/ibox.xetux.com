@@ -22,6 +22,9 @@ export const config = cleanEnv(process.env, {
   // Telegram y pasándolas a Chatwoot, y sigue asignando equipos en Chatwoot.
   // Las respuestas escritas por los agentes no pasan por ibox: las envía Chatwoot.
   TELEGRAM_ENVIOS_PAUSADOS: bool({ default: false }),
+  // Usuario del bot. Solo se usa con los envíos pausados, para que grammY pueda
+  // identificarse sin llamar a getMe.
+  TELEGRAM_BOT_USERNAME: str({ default: 'xetuxBot' }),
 
   // Chatwoot
   CHATWOOT_BASE_URL: str(),

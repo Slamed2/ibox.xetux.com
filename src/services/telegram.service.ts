@@ -126,6 +126,26 @@ export function telegramEnviosPausados(): boolean {
 
 bot.api.config.use(async (prev, method, payload, signal) => {
   if (!config.TELEGRAM_ENVIOS_PAUSADOS) return prev(method, payload, signal);
+  // grammY llama a getMe una vez para identificarse antes de procesar la primera
+  // actualización. Si eso falla, falla el procesamiento de TODAS: no se registran
+  // los mensajes entrantes y el webhook responde 500 (Telegram reenvía cada una).
+  // Con los envíos pausados se contesta aquí, sin llamar a Telegram.
+  if (method === 'getMe') {
+    return {
+      ok: true,
+      result: {
+        id: Number(config.TELEGRAM_BOT_TOKEN.split(':')[0]),
+        is_bot: true,
+        first_name: config.COMPANY_NAME,
+        username: config.TELEGRAM_BOT_USERNAME,
+        can_join_groups: true,
+        can_read_all_group_messages: true,
+        supports_inline_queries: false,
+        can_connect_to_business: true,
+        has_main_web_app: false,
+      },
+    } as any;
+  }
   return {
     ok: false,
     error_code: 429,
