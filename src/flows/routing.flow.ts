@@ -41,6 +41,9 @@ function teamConfirmTextPlain(teamId: number, teamLabel: string, conversationId:
 type NudgeState = 'sysfail_pending' | 'sysfail_reminded' | 'dept_pending' | 'dept_reminded';
 export const conversationNudgeState = new TtlMap<number, NudgeState>(30 * 60_000); // 30 min TTL
 
+// Mensajes entrantes ya atendidos (conversación:source_id), para no responder dos veces.
+const processedIncoming = new TtlMap<string, true>(60 * 60_000);
+
 const NUDGE_SYSFAIL =
   '👋 ¡Hola de nuevo! Para poder ayudarte rápidamente, por favor indícanos si presentas alguna falla que impida tus ventas en este momento:';
 
@@ -91,6 +94,21 @@ export async function handleMessageCreated(payload: ChatwootWebhookPayload) {
 
   const content = message.content ?? '';
   const conversationId = conversation.id;
+
+  // Un mismo mensaje de Telegram puede llegar varias veces: cuando el trabajo de
+  // Chatwoot falla después de crearlo (p. ej. 429 de Telegram), Sidekiq lo
+  // reintenta y lo vuelve a crear. Sin esto, ibox respondía al cliente en cada
+  // copia (16-nov-2026: 10 copias, 6 respuestas repetidas al mismo cliente).
+  const rawSourceId = (message as { source_id?: string | number | null }).source_id;
+  const sourceId = rawSourceId != null ? String(rawSourceId) : '';
+  if (sourceId) {
+    const key = `${conversationId}:${sourceId}`;
+    if (processedIncoming.has(key)) {
+      logger.warn({ conversationId, sourceId }, 'Routing: mensaje duplicado de Chatwoot — se ignora');
+      return { action: 'skipped', reason: 'duplicate_source_id' };
+    }
+    processedIncoming.set(key, true);
+  }
   const contact = conversation.contact ?? (conversation as any).meta?.sender;
   const contactId = contact?.id;
   const telegramUserId = contact?.additional_attributes?.social_telegram_user_id as number | undefined;
