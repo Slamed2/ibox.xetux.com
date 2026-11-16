@@ -5,6 +5,13 @@ import { bot, setupTelegramWebhook, registerGroupMigration, getMigratedGroupId }
 import { keepAliveHttpAgent, keepAliveHttpsAgent, chatwootService } from '../services/chatwoot.service.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
+import { TtlMap } from '../utils/ttl-map.js';
+
+// update_id de Telegram ya procesados. Telegram reenvía una actualización si no
+// le contestamos OK a tiempo; con el bot frenado por un 429 eso pasaba con cada
+// botón pulsado, y cada reenvío creaba otra copia en Chatwoot y otra respuesta
+// al cliente (16-nov-2026). Una actualización se procesa una sola vez.
+const processedUpdates = new TtlMap<number, true>(60 * 60_000);
 export const telegramPlugin: FastifyPluginAsync = async (fastify) => {
   // Register webhook route with secret path
   const webhookPath = `/telegram/${config.TELEGRAM_WEBHOOK_SECRET}`;
@@ -14,6 +21,11 @@ export const telegramPlugin: FastifyPluginAsync = async (fastify) => {
 
   fastify.post(webhookPath, async (request, reply) => {
     const update = request.body as any;
+    const updateId = typeof update?.update_id === 'number' ? update.update_id : null;
+    if (updateId != null && processedUpdates.has(updateId)) {
+      logger.warn({ updateId }, 'Telegram: actualización repetida — se ignora');
+      return reply.send({ ok: true });
+    }
     const msg = update?.message ?? update?.edited_message;
     logger.debug({
       updateId: update?.update_id,
@@ -44,6 +56,9 @@ export const telegramPlugin: FastifyPluginAsync = async (fastify) => {
       return { ok: false, error: 'Chatwoot forward failed' };
     }
 
+    // Chatwoot ya la tiene: desde aquí, un reenvío de Telegram sería una copia.
+    if (updateId != null) processedUpdates.set(updateId, true);
+
     // 2b. Capture video thumbnails (incl. >20MB videos Chatwoot can't download).
     //     Fire-and-forget so it never blocks/breaks the webhook response.
     void handleVideoThumbnail(update).catch((err) =>
@@ -53,6 +68,10 @@ export const telegramPlugin: FastifyPluginAsync = async (fastify) => {
     // 2. Process with grammY (our bot logic) — only after Chatwoot confirmed
     const handler = webhookCallback(bot, 'fastify', {
       secretToken: config.TELEGRAM_WEBHOOK_SECRET,
+      // Si nuestra lógica tarda (p. ej. el throttler esperando un 429), se contesta
+      // OK a Telegram igualmente y la lógica sigue: si no, Telegram reenvía la
+      // actualización y se duplica todo.
+      onTimeout: 'return',
     });
     return handler(request, reply);
   });
