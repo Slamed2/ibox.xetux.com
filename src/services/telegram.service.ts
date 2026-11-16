@@ -45,11 +45,25 @@ export function telegramFrenado(): boolean {
   return Date.now() < telegramFrenadoHasta;
 }
 
-function errorFrenado(method: string): Error {
-  const err: any = new Error(`Telegram frenado (429): no se llama a ${method} hasta ${new Date(telegramFrenadoHasta).toISOString()}`);
-  err.error_code = 429;
-  err.frenado = true;
-  return err;
+// Respuesta con la misma forma que daría Telegram, sin llamarle. grammY convierte
+// las respuestas ok:false en su error habitual, así que quien llama lo ve igual.
+function respuestaFrenada(method: string): any {
+  const quedan = Math.max(1, Math.ceil((telegramFrenadoHasta - Date.now()) / 1000));
+  return {
+    ok: false,
+    error_code: 429,
+    description: `Too Many Requests: frenado localmente (${method}), retry after ${quedan}`,
+    parameters: { retry_after: quedan },
+  };
+}
+
+function activarFreno(method: string, retryAfterRaw: unknown) {
+  const retryAfter = Number(retryAfterRaw) || 60;
+  const hasta = Date.now() + retryAfter * 1000 + FRENO_MARGEN_MS;
+  if (hasta > telegramFrenadoHasta) {
+    telegramFrenadoHasta = hasta;
+    logger.warn({ method, retryAfter, hasta: new Date(hasta).toISOString() }, 'Telegram 429: freno activado, sin llamadas a la API');
+  }
 }
 
 // Retry transformer — wraps all outgoing Telegram API calls with exponential backoff
@@ -59,20 +73,20 @@ bot.api.config.use(async (prev, method, payload, signal) => {
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    if (telegramFrenado()) throw errorFrenado(method);
+    if (telegramFrenado()) return respuestaFrenada(method) as any;
     try {
-      return await prev(method, payload, signal);
+      const res: any = await prev(method, payload, signal);
+      // grammY no lanza el 429: llega como respuesta ok:false. Nunca reintentar
+      // un 429: activar el freno y devolverlo tal cual.
+      if (res && res.ok === false && res.error_code === 429) {
+        activarFreno(method, res.parameters?.retry_after);
+      }
+      return res;
     } catch (error: any) {
       lastError = error;
       const status = error?.error_code ?? error?.status;
       if (status === 429) {
-        // Nunca reintentar un 429: activar el freno y fallar ya.
-        const retryAfter = Number(error?.parameters?.retry_after) || 60;
-        const hasta = Date.now() + retryAfter * 1000 + FRENO_MARGEN_MS;
-        if (hasta > telegramFrenadoHasta) {
-          telegramFrenadoHasta = hasta;
-          logger.warn({ method, retryAfter, hasta: new Date(hasta).toISOString() }, 'Telegram 429: freno activado, sin llamadas a la API');
-        }
+        activarFreno(method, error?.parameters?.retry_after);
         throw error;
       }
       const isRetryable = (status >= 500 && status < 600)
