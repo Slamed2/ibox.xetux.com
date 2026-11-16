@@ -113,6 +113,31 @@ bot.api.config.use(async (prev, method, payload, signal) => {
 // reintento también quede paceado.
 bot.api.config.use(apiThrottler());
 
+// Interruptor de emergencia: TELEGRAM_ENVIOS_PAUSADOS=true. Es el último
+// transformer registrado, así que es el primero que ve cada llamada: corta antes
+// del throttler y de los reintentos, y nada llega a Telegram. Quien llama recibe
+// el error habitual de grammY (igual que con el freno del 429), de modo que los
+// flujos siguen su camino normal de error: lo que hacen en Chatwoot en paralelo
+// (asignar equipo, etiquetas) se mantiene; lo que iba al cliente no sale ni se
+// refleja en Chatwoot como enviado.
+export function telegramEnviosPausados(): boolean {
+  return config.TELEGRAM_ENVIOS_PAUSADOS;
+}
+
+bot.api.config.use(async (prev, method, payload, signal) => {
+  if (!config.TELEGRAM_ENVIOS_PAUSADOS) return prev(method, payload, signal);
+  return {
+    ok: false,
+    error_code: 429,
+    description: `Too Many Requests: envíos pausados por TELEGRAM_ENVIOS_PAUSADOS (${method}), sin llamar a Telegram`,
+    parameters: { retry_after: 60 },
+  } as any;
+});
+
+if (config.TELEGRAM_ENVIOS_PAUSADOS) {
+  logger.warn('TELEGRAM_ENVIOS_PAUSADOS=true: ibox no hará ninguna llamada a Telegram (saludos, menús y avisos apagados)');
+}
+
 // ─── Group migration infrastructure ─────────────────────────────────────────
 
 const groupMigrations = new Map<number, number>();
@@ -286,6 +311,13 @@ bot.catch((err) => {
 
 export async function setupTelegramWebhook(webhookUrl: string) {
   await loadGroupMigrations();
+
+  // Con los envíos pausados no se toca la API: los comandos y el webhook ya
+  // están configurados de arranques anteriores.
+  if (config.TELEGRAM_ENVIOS_PAUSADOS) {
+    logger.warn({ webhookUrl }, 'Envíos pausados: se omite la configuración de comandos y webhook en Telegram');
+    return;
+  }
 
   await bot.api.deleteMyCommands({ scope: { type: 'default' } });
   await bot.api.deleteMyCommands({ scope: { type: 'all_private_chats' } });

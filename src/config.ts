@@ -16,6 +16,12 @@ export const config = cleanEnv(process.env, {
   WEBHOOK_BASE_URL: str({ default: '' }),
   TELEGRAM_API_RETRIES: num({ default: 3 }),
   TELEGRAM_API_BASE_DELAY_MS: num({ default: 500 }),
+  // Interruptor de emergencia (16-nov-2026). En true, ibox NO hace ninguna llamada
+  // a la API de Telegram: ni saludos, ni menús, ni avisos de asignación o cierre,
+  // ni la configuración del arranque. Sigue recibiendo las actualizaciones de
+  // Telegram y pasándolas a Chatwoot, y sigue asignando equipos en Chatwoot.
+  // Las respuestas escritas por los agentes no pasan por ibox: las envía Chatwoot.
+  TELEGRAM_ENVIOS_PAUSADOS: bool({ default: false }),
 
   // Chatwoot
   CHATWOOT_BASE_URL: str(),
