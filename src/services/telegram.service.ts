@@ -32,6 +32,26 @@ bot.api.config.use((prev, method, payload, signal) => {
   return prev(method, payload, signal);
 });
 
+// Freno global ante un 429 (16-nov-2026). Con el bot limitado por Telegram,
+// cada llamada que hacíamos (y cada reintento a los 60 s) renovaba el límite y
+// el bot no se liberaba nunca. Tras un 429, NINGUNA llamada sale hacia Telegram
+// hasta que pase retry_after más un margen: fallan al instante aquí, sin tocar
+// la API. Lo que no se envía en ese rato se pierde (saludos, menús), que es mejor
+// que mantener el bot bloqueado para todos.
+const FRENO_MARGEN_MS = 15_000;
+let telegramFrenadoHasta = 0;
+
+export function telegramFrenado(): boolean {
+  return Date.now() < telegramFrenadoHasta;
+}
+
+function errorFrenado(method: string): Error {
+  const err: any = new Error(`Telegram frenado (429): no se llama a ${method} hasta ${new Date(telegramFrenadoHasta).toISOString()}`);
+  err.error_code = 429;
+  err.frenado = true;
+  return err;
+}
+
 // Retry transformer — wraps all outgoing Telegram API calls with exponential backoff
 bot.api.config.use(async (prev, method, payload, signal) => {
   const maxRetries = config.TELEGRAM_API_RETRIES;
@@ -39,13 +59,23 @@ bot.api.config.use(async (prev, method, payload, signal) => {
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (telegramFrenado()) throw errorFrenado(method);
     try {
       return await prev(method, payload, signal);
     } catch (error: any) {
       lastError = error;
       const status = error?.error_code ?? error?.status;
-      const isRetryable = status === 429
-        || (status >= 500 && status < 600)
+      if (status === 429) {
+        // Nunca reintentar un 429: activar el freno y fallar ya.
+        const retryAfter = Number(error?.parameters?.retry_after) || 60;
+        const hasta = Date.now() + retryAfter * 1000 + FRENO_MARGEN_MS;
+        if (hasta > telegramFrenadoHasta) {
+          telegramFrenadoHasta = hasta;
+          logger.warn({ method, retryAfter, hasta: new Date(hasta).toISOString() }, 'Telegram 429: freno activado, sin llamadas a la API');
+        }
+        throw error;
+      }
+      const isRetryable = (status >= 500 && status < 600)
         || error?.code === 'ECONNRESET'
         || error?.code === 'ETIMEDOUT';
 
