@@ -208,7 +208,7 @@ async function forwardToChatwoot(body: unknown, chatwootUrl: string): Promise<vo
   logger.debug('Forwarded Telegram update to Chatwoot');
 }
 
-const TELEGRAM_MAX_DOWNLOAD = 20 * 1024 * 1024; // 20 MB — límite de descarga para bots
+const TELEGRAM_MAX_DOWNLOAD = config.TELEGRAM_MAX_DOWNLOAD_MB * 1024 * 1024; // límite de descarga del bot (20 MB nube, 2000 MB servidor propio)
 
 /**
  * Cuando llega un VIDEO que supera el límite de descarga de bots (20 MB), Chatwoot
@@ -261,7 +261,7 @@ async function handleVideoThumbnail(update: any): Promise<void> {
 
   // 1. Enviar al cliente el enlace de subida (+ espejo en Chatwoot para el agente)
   const uploadUrl = `${config.WEBAPP_BASE_URL}/upload?conversation_id=${conversationId}`;
-  const clientMsg = '📎 Tu video supera el límite de 20 MB de Telegram. Súbelo aquí para que podamos verlo:';
+  const clientMsg = `📎 Tu video supera el límite de ${config.TELEGRAM_MAX_DOWNLOAD_MB} MB de Telegram. Súbelo aquí para que podamos verlo:`;
   // Abrir en el navegador externo (no mini app): el WebView interno de Telegram en
   // iOS no deja elegir videos de la galería; Safari sí permite foto o video.
   const uploadKeyboard = new InlineKeyboard().url('📎 Subir archivo', uploadUrl);

@@ -25,6 +25,9 @@ export const config = cleanEnv(process.env, {
   // Usuario del bot. Solo se usa con los envíos pausados, para que grammY pueda
   // identificarse sin llamar a getMe.
   TELEGRAM_BOT_USERNAME: str({ default: 'xetuxBot' }),
+  // Tamaño máximo que el bot puede descargar. 20 MB con la nube de Telegram; con el servidor
+  // propio en modo local (18-nov-2026) son 2000 MB. Por encima, ibox pide al cliente subir el video.
+  TELEGRAM_MAX_DOWNLOAD_MB: num({ default: 20 }),
 
   // Chatwoot
   CHATWOOT_BASE_URL: str(),
