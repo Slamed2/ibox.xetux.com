@@ -1,10 +1,31 @@
 // ─── Consultoría Venezuela custom messages ─────────────────────────────────
 
-export const CONSULTORIA_VE_GREETING =
-  '¡Buen día! ☀️ Qué gusto saludarte.\nLe saluda el equipo del Departamento de Consultoría Xetux Venezuela. Estamos aquí para ayudarte a impulsar y optimizar tu negocio. Cuéntanos, ¿en qué podemos acompañarte el día de hoy?';
+import { isConsultoriaVeOpen, saludoSegunHora } from '../utils/business-hours.js';
+
+// 17-nov-2026: el saludo depende de la hora y, al elegir Consultoría, saludo,
+// aviso de fuera de horario y pista del menú van en UN solo mensaje (antes, 3).
+export function consultoriaVeGreeting(now: Date = new Date()): string {
+  return `${saludoSegunHora(now)} Qué gusto saludarte.\nLe saluda el equipo del Departamento de Consultoría Xetux Venezuela. Estamos aquí para ayudarte a impulsar y optimizar tu negocio. Cuéntanos, ¿en qué podemos acompañarte?`;
+}
 
 export const CONSULTORIA_VE_OUT_OF_HOURS =
-  '🕐 ¡Gracias por escribirnos a Xetux!\nEn este momento nuestro equipo se encuentra en su descanso. Nuestro horario de atención en vivo es de 9:00 am a 6:00 pm, todos los días.\n\n¡Pero descuida! Tu mensaje ya quedó guardado con prioridad en nuestro sistema. A primera hora al retomar nuestro turno, un especialista te atenderá sin falta. ¡Que tengas un feliz resto del día! 😊';
+  '🕐 En este momento nuestro equipo se encuentra en su descanso. Nuestro horario de atención en vivo es de 9:00 am a 6:00 pm, todos los días. ¡Pero descuida! Tu mensaje ya quedó guardado con prioridad en nuestro sistema. A primera hora al retomar nuestro turno, un especialista te atenderá sin falta. 😊';
+
+/**
+ * Bienvenida a Consultoría VE en un solo mensaje: saludo + (fuera de horario,
+ * si se pide y aplica) + pista para cambiar de área.
+ */
+export function consultoriaVeBienvenida(conHorario: boolean, now: Date = new Date()): string {
+  const partes = [consultoriaVeGreeting(now)];
+  if (conHorario && !isConsultoriaVeOpen(now)) partes.push(CONSULTORIA_VE_OUT_OF_HOURS);
+  partes.push(DEPARTMENT_SWITCH_HINT);
+  return partes.join('\n\n');
+}
+
+/** El cliente vuelve a elegir el área en la que ya está: confirmación corta. */
+export function mismaAreaText(teamName: string): string {
+  return `✅ Ya estás con el equipo de ${teamName}. Un especialista continuará contigo por aquí mismo.`;
+}
 
 // Cierre por motivo declarado por el agente en el formulario de la extensión.
 // La etiqueta la pone la extensión ANTES de resolver, así que llega en el

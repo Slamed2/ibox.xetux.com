@@ -3,7 +3,7 @@ import { withExecutionLog } from '../services/execution-log.service.js';
 import { bot, wasBotAssignment, markBotAssignment } from '../services/telegram.service.js';
 import { TEAMS, TEAM_LABELS, TEAM_NAMES } from '../services/department-menu.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
-import { CONSULTORIA_VE_GREETING, DEPARTMENT_SWITCH_HINT } from '../constants/messages.js';
+import { consultoriaVeBienvenida } from '../constants/messages.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { assignTeamSmart } from './routing.flow.js';
@@ -144,7 +144,7 @@ async function handleTeamChange(conversation: any, telegramUserId: number | unde
     async () => {
       const teamName = TEAM_NAMES[currentTeamId] ?? `Equipo #${currentTeamId}`;
       const message = currentTeamId === TEAMS.CONSULTORIA_VE
-        ? CONSULTORIA_VE_GREETING
+        ? consultoriaVeBienvenida(false)
         : `🔄 Con el fin de darte la mejor atención, he transferido tu consulta al equipo especializado de *${teamName}*.\nUn agente de esa área tomará tu chat en breve para darle continuidad a tu requerimiento. ¡Gracias por tu paciencia!`;
       const teamLabelTag = TEAM_LABELS[currentTeamId];
 
@@ -156,24 +156,13 @@ async function handleTeamChange(conversation: any, telegramUserId: number | unde
 
       // Sync to Chatwoot (needs telegramMessageId)
       const chatwootContent = currentTeamId === TEAMS.CONSULTORIA_VE
-        ? CONSULTORIA_VE_GREETING
+        ? consultoriaVeBienvenida(false)
         : `🔄 Con el fin de darte la mejor atención, he transferido tu consulta al equipo especializado de ${teamName}.\nUn agente de esa área tomará tu chat en breve para darle continuidad a tu requerimiento. ¡Gracias por tu paciencia!`;
       await chatwootService.sendMessage(conversation.id, {
         content: chatwootContent,
         message_type: 'outgoing',
         ...(sentMsg ? { source_id: String(sentMsg.message_id) } : {}),
       });
-
-      // Send department switch hint as separate message for Consultoría VE
-      if (currentTeamId === TEAMS.CONSULTORIA_VE && telegramUserId) {
-        const hint = DEPARTMENT_SWITCH_HINT;
-        const hintMsg = await bot.api.sendMessage(telegramUserId, hint);
-        await chatwootService.sendMessage(conversation.id, {
-          content: hint,
-          message_type: 'outgoing',
-          source_id: String(hintMsg.message_id),
-        });
-      }
 
       return { action: 'team_notified', currentTeamId, teamName };
     },

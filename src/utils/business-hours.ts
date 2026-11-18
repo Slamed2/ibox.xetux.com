@@ -20,3 +20,20 @@ export function isConsultoriaVeOpen(now: Date = new Date()): boolean {
   );
   return hour >= OPEN_HOUR && hour < CLOSE_HOUR;
 }
+
+/**
+ * Saludo según la hora de Venezuela (17-nov-2026: antes siempre decía
+ * «¡Buen día!», también de noche).
+ */
+export function saludoSegunHora(now: Date = new Date()): string {
+  const hour = Number(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: VE_TIMEZONE,
+      hour: '2-digit',
+      hourCycle: 'h23',
+    }).format(now),
+  );
+  if (hour >= 5 && hour < 12) return '¡Buen día! ☀️';
+  if (hour >= 12 && hour < 19) return '¡Buenas tardes! 🌤️';
+  return '¡Buenas noches! 🌙';
+}

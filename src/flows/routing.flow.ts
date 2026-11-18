@@ -21,16 +21,15 @@ import { TtlMap } from '../utils/ttl-map.js';
 // TODO: Configurar keywords y sus team_ids correspondientes
 const KEYWORD_ROUTES: Array<{ keywords: string[]; teamId: number; label: string }> = [];
 
-import { CONSULTORIA_VE_GREETING, CONSULTORIA_VE_OUT_OF_HOURS, DEPARTMENT_SWITCH_HINT, SYSTEM_FAILURE_APOLOGY, FISCAL_STATUS_RECEIVED } from '../constants/messages.js';
-import { isConsultoriaVeOpen } from '../utils/business-hours.js';
+import { consultoriaVeBienvenida, mismaAreaText, DEPARTMENT_SWITCH_HINT, SYSTEM_FAILURE_APOLOGY, FISCAL_STATUS_RECEIVED } from '../constants/messages.js';
 
 function teamConfirmText(teamId: number, teamLabel: string, conversationId: number): string {
-  if (teamId === TEAMS.CONSULTORIA_VE) return CONSULTORIA_VE_GREETING;
+  if (teamId === TEAMS.CONSULTORIA_VE) return consultoriaVeBienvenida(true);
   return `✅ ¡Solicitud recibida con éxito! (Ref: #${conversationId})\nTu caso ha sido asignado al equipo de *${teamLabel}*. Un especialista tomará tu conversación en muy poco tiempo para ayudarte.\n\n${DEPARTMENT_SWITCH_HINT}`;
 }
 
 function teamConfirmTextPlain(teamId: number, teamLabel: string, conversationId: number): string {
-  if (teamId === TEAMS.CONSULTORIA_VE) return CONSULTORIA_VE_GREETING;
+  if (teamId === TEAMS.CONSULTORIA_VE) return consultoriaVeBienvenida(true);
   return `✅ ¡Solicitud recibida con éxito! (Ref: #${conversationId})\nTu caso ha sido asignado al equipo de ${teamLabel}. Un especialista tomará tu conversación en muy poco tiempo para ayudarte.\n\n${DEPARTMENT_SWITCH_HINT}`;
 }
 
@@ -271,28 +270,37 @@ async function handleStartCommand(
 }
 
 /**
- * Mensajes extra que se envían tras asignar Consultoría VE:
- * - Si está fuera de horario (hora de Venezuela), avisa que el canal está cerrado.
- *   El chat YA quedó asignado; el aviso es solo informativo.
- * - Siempre envía el hint para cambiar de departamento.
- * Cada mensaje se espeja en Chatwoot con su source_id de Telegram.
+ * Equipo actual de la conversación, leído de Chatwoot (el del webhook puede
+ * venir desactualizado). null si no tiene o no se pudo leer.
  */
-async function sendConsultoriaVePostAssign(conversationId: number, telegramUserId: number) {
-  if (!isConsultoriaVeOpen()) {
-    const closedMsg = await bot.api.sendMessage(telegramUserId, CONSULTORIA_VE_OUT_OF_HOURS);
-    await chatwootService.sendMessage(conversationId, {
-      content: CONSULTORIA_VE_OUT_OF_HOURS,
-      message_type: 'outgoing',
-      source_id: String(closedMsg.message_id),
-    });
+async function equipoActual(conversationId: number): Promise<number | null> {
+  try {
+    const conv = await chatwootService.getConversation(conversationId);
+    return conv?.team_id != null ? Number(conv.team_id) : (conv?.meta?.team?.id ?? null);
+  } catch (err) {
+    logger.warn({ err, conversationId }, 'No se pudo leer el equipo actual de la conversación');
+    return null;
   }
+}
 
-  const hintMsg = await bot.api.sendMessage(telegramUserId, DEPARTMENT_SWITCH_HINT);
+/**
+ * 17-nov-2026: si el cliente vuelve a elegir el área en la que ya está, solo se
+ * le confirma con un mensaje corto (antes se repetía toda la bienvenida).
+ * Soporte VE queda fuera: re-elegirlo reevalúa al agente (assignTeamSmart).
+ * Devuelve true si ya estaba en esa área y se respondió.
+ */
+async function responderSiMismaArea(conversationId: number, telegramUserId: number | undefined, teamId: number): Promise<boolean> {
+  if (teamId === TEAMS.SOPORTE_VE) return false;
+  if ((await equipoActual(conversationId)) !== teamId) return false;
+  const texto = mismaAreaText(TEAM_NAMES[teamId] ?? 'esta área');
+  const sent = telegramUserId ? await bot.api.sendMessage(telegramUserId, texto) : null;
   await chatwootService.sendMessage(conversationId, {
-    content: DEPARTMENT_SWITCH_HINT,
+    content: texto,
     message_type: 'outgoing',
-    source_id: String(hintMsg.message_id),
+    ...(sent ? { source_id: String(sent.message_id) } : {}),
   });
+  logger.info({ conversationId, teamId }, 'Área re-elegida: ya estaba en ella, confirmación corta');
+  return true;
 }
 
 /**
@@ -441,6 +449,11 @@ async function handleTeamSelection(
         await chatwootService.deleteMessage(conversationId, message.id as number);
       }
 
+      if (await responderSiMismaArea(conversationId, telegramUserId, selection.teamId)) {
+        conversationNudgeState.delete(conversationId);
+        return { action: 'same_team', ...selection, conversationId };
+      }
+
       // Mark as bot assignment to suppress duplicate notifications in assignment.flow
       markBotAssignment(conversationId);
       conversationNudgeState.delete(conversationId);
@@ -462,11 +475,6 @@ async function handleTeamSelection(
         message_type: 'outgoing',
         ...(sentMsg ? { source_id: String(sentMsg.message_id) } : {}),
       });
-
-      // Consultoría VE: aviso fuera de horario (si aplica) + hint de cambio de departamento
-      if (selection.teamId === TEAMS.CONSULTORIA_VE && telegramUserId) {
-        await sendConsultoriaVePostAssign(conversationId, telegramUserId);
-      }
 
       return { action: 'team_assigned', ...selection, conversationId };
     },
@@ -515,6 +523,11 @@ async function handleDepartmentCommand(
         return { action: 'unknown_command', command };
       }
 
+      if (await responderSiMismaArea(conversationId, telegramUserId, resolved.teamId)) {
+        conversationNudgeState.delete(conversationId);
+        return { action: 'same_team', teamId: resolved.teamId, label: resolved.label };
+      }
+
       markBotAssignment(conversationId);
       conversationNudgeState.delete(conversationId);
 
@@ -535,11 +548,6 @@ async function handleDepartmentCommand(
         message_type: 'outgoing',
         source_id: String(sentMsg.message_id),
       });
-
-      // Consultoría VE: aviso fuera de horario (si aplica) + hint de cambio de departamento
-      if (resolved.teamId === TEAMS.CONSULTORIA_VE) {
-        await sendConsultoriaVePostAssign(conversationId, telegramUserId);
-      }
 
       return { action: 'team_assigned', teamId: resolved.teamId, label: resolved.label };
     },
