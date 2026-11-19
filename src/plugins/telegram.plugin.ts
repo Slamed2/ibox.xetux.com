@@ -1,7 +1,7 @@
 import { FastifyPluginAsync } from 'fastify';
 import { webhookCallback, InlineKeyboard } from 'grammy';
 import axios from 'axios';
-import { bot, setupTelegramWebhook, registerGroupMigration, getMigratedGroupId } from '../services/telegram.service.js';
+import { bot, setupTelegramWebhook, registerGroupMigration, getMigratedGroupId, urlArchivoTelegram } from '../services/telegram.service.js';
 import { keepAliveHttpAgent, keepAliveHttpsAgent, chatwootService } from '../services/chatwoot.service.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
@@ -294,7 +294,7 @@ async function handleVideoThumbnail(update: any): Promise<void> {
 
   // Descargar la miniatura (es chica → getFile funciona) y subirla a Chatwoot
   const file = await bot.api.getFile(thumb.file_id);
-  const fileUrl = `https://api.telegram.org/file/bot${config.TELEGRAM_BOT_TOKEN}/${file.file_path}`;
+  const fileUrl = urlArchivoTelegram(file.file_path ?? '');
   const resp = await axios.get<ArrayBuffer>(fileUrl, {
     responseType: 'arraybuffer',
     timeout: config.CHATWOOT_API_TIMEOUT_MS,

@@ -28,6 +28,15 @@ export const config = cleanEnv(process.env, {
   // Tamaño máximo que el bot puede descargar. 20 MB con la nube de Telegram; con el servidor
   // propio en modo local (18-nov-2026) son 2000 MB. Por encima, ibox pide al cliente subir el video.
   TELEGRAM_MAX_DOWNLOAD_MB: num({ default: 20 }),
+  // Servidor de la Bot API (19-nov-2026). Por defecto la nube de Telegram; para el servidor
+  // propio, http://xetux2_telegram-bot-api:8081. Si se cambia sin mover el webhook, poner
+  // TELEGRAM_CONFIGURAR_WEBHOOK=false: un webhook en cada servidor duplica cada mensaje.
+  TELEGRAM_API_ROOT: str({ default: 'https://api.telegram.org' }),
+  // Desde dónde se descargan los archivos que el servidor propio guarda en disco (modo local:
+  // getFile devuelve una ruta absoluta). Lo sirve el nginx interno telegram-archivos.
+  TELEGRAM_ARCHIVOS_PROPIOS: str({ default: 'http://xetux2_telegram-archivos' }),
+  // Si al arrancar se registran los comandos y el webhook en TELEGRAM_API_ROOT.
+  TELEGRAM_CONFIGURAR_WEBHOOK: bool({ default: true }),
 
   // Chatwoot
   CHATWOOT_BASE_URL: str(),

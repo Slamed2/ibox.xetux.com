@@ -10,7 +10,19 @@ import { eq } from 'drizzle-orm';
 import { BOT_COMMANDS } from './department-menu.js';
 import { TtlMap } from '../utils/ttl-map.js';
 
-export const bot = new Bot(config.TELEGRAM_BOT_TOKEN);
+export const bot = new Bot(config.TELEGRAM_BOT_TOKEN, {
+  client: { apiRoot: config.TELEGRAM_API_ROOT.replace(/\/+$/, '') },
+});
+
+// URL de descarga de un archivo de getFile. El servidor propio en modo local devuelve la
+// ruta absoluta en su disco; se descarga del nginx interno que sirve esa carpeta.
+const RAIZ_PROPIA = '/var/lib/telegram-bot-api/';
+export function urlArchivoTelegram(filePath: string): string {
+  if (filePath.startsWith(RAIZ_PROPIA)) {
+    return `${config.TELEGRAM_ARCHIVOS_PROPIOS.replace(/\/+$/, '')}/${filePath.slice(RAIZ_PROPIA.length)}`;
+  }
+  return `${config.TELEGRAM_API_ROOT.replace(/\/+$/, '')}/file/bot${config.TELEGRAM_BOT_TOKEN}/${filePath}`;
+}
 
 /**
  * grammY API transformer: rewrite chat_id in outgoing API calls
@@ -336,6 +348,13 @@ export async function setupTelegramWebhook(webhookUrl: string) {
   // están configurados de arranques anteriores.
   if (config.TELEGRAM_ENVIOS_PAUSADOS) {
     logger.warn({ webhookUrl }, 'Envíos pausados: se omite la configuración de comandos y webhook en Telegram');
+    return;
+  }
+
+  // Con el webhook todavía en otro servidor (nube) no se registra aquí: habría dos y
+  // cada mensaje llegaría dos veces.
+  if (!config.TELEGRAM_CONFIGURAR_WEBHOOK) {
+    logger.warn({ webhookUrl, apiRoot: config.TELEGRAM_API_ROOT }, 'TELEGRAM_CONFIGURAR_WEBHOOK=false: se omite la configuración de comandos y webhook');
     return;
   }
 
