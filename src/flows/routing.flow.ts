@@ -12,6 +12,7 @@ import {
   SYSFAIL_OPTIONS_TEXT,
   FISCAL_STATUS_LABEL,
   VENTAS_ADMIN_ENABLED,
+  callbackDataFromLabel,
 } from '../services/department-menu.js';
 import type { ChatwootWebhookPayload } from '../types/chatwoot.types.js';
 import { config } from '../config.js';
@@ -123,17 +124,23 @@ export async function handleMessageCreated(payload: ChatwootWebhookPayload) {
     return;
   }
 
+  // Botón pulsado: llega con el texto del botón (o, de versiones anteriores, con
+  // el dato crudo, que sí se borra de Chatwoot por ilegible).
+  const callbackData = callbackDataFromLabel(content);
+  const selectionContent = callbackData ?? content;
+  const isRawCallback = !callbackData;
+
   // --- System-failure triage answer (Sí / No) ---
-  const sysfail = extractSysfailSelection(content);
+  const sysfail = extractSysfailSelection(selectionContent);
   if (sysfail) {
-    await handleSysfailSelection(sysfail, conversationId, contactId, telegramUserId, message, payload);
+    await handleSysfailSelection(sysfail, conversationId, contactId, telegramUserId, message, payload, isRawCallback);
     return;
   }
 
   // --- Team selection from callback button ---
-  const teamSelection = extractTeamSelection(content);
+  const teamSelection = extractTeamSelection(selectionContent);
   if (teamSelection) {
-    await handleTeamSelection(teamSelection, conversationId, contactId, telegramUserId, message, payload);
+    await handleTeamSelection(teamSelection, conversationId, contactId, telegramUserId, message, payload, isRawCallback);
     return;
   }
 
@@ -346,6 +353,31 @@ export async function assignTeamSmart(conversationId: number, teamId: number): P
   await chatwootService.assignConversation(conversationId, { team_id: teamId });
 }
 
+/**
+ * Tras pulsar un botón. Dato crudo (versión anterior): se borra de Chatwoot como
+ * siempre, y ese borrado quita también el menú en Telegram (message-update.flow).
+ * Texto del botón: se queda en Chatwoot para que el agente vea lo elegido, y el
+ * menú se borra en Telegram directamente, para que el cliente vea lo mismo que antes.
+ */
+async function limpiarMenuPulsado(
+  conversationId: number,
+  telegramUserId: number | undefined,
+  message: any,
+  isRawCallback: boolean,
+): Promise<void> {
+  if (isRawCallback) {
+    if (message.id) await chatwootService.deleteMessage(conversationId, message.id as number);
+    return;
+  }
+  const menuMessageId = Number(message.source_id);
+  if (!telegramUserId || !Number.isInteger(menuMessageId) || menuMessageId <= 0) return;
+  try {
+    await bot.api.deleteMessage(telegramUserId, menuMessageId);
+  } catch (err) {
+    logger.warn({ err, telegramUserId, menuMessageId, conversationId }, 'No se pudo borrar el menú pulsado en Telegram');
+  }
+}
+
 // ─── System-failure triage (Sí / No) ───────────────────────────────────────
 
 async function handleSysfailSelection(
@@ -355,6 +387,7 @@ async function handleSysfailSelection(
   telegramUserId: number | undefined,
   message: any,
   payload: ChatwootWebhookPayload,
+  isRawCallback: boolean,
 ) {
   await withExecutionLog(
     {
@@ -367,10 +400,7 @@ async function handleSysfailSelection(
       metadata: { answer },
     },
     async () => {
-      // Delete the raw callback data message from Chatwoot
-      if (message.id) {
-        await chatwootService.deleteMessage(conversationId, message.id as number);
-      }
+      await limpiarMenuPulsado(conversationId, telegramUserId, message, isRawCallback);
       conversationNudgeState.delete(conversationId);
 
       // NO → sin falla: seguir el flujo normal (menú de departamento)
@@ -432,6 +462,7 @@ async function handleTeamSelection(
   telegramUserId: number | undefined,
   message: any,
   payload: ChatwootWebhookPayload,
+  isRawCallback: boolean,
 ) {
   await withExecutionLog(
     {
@@ -444,10 +475,7 @@ async function handleTeamSelection(
       metadata: { teamId: selection.teamId, teamLabel: selection.teamLabel },
     },
     async () => {
-      // Delete the raw callback data message from Chatwoot
-      if (message.id) {
-        await chatwootService.deleteMessage(conversationId, message.id as number);
-      }
+      await limpiarMenuPulsado(conversationId, telegramUserId, message, isRawCallback);
 
       if (await responderSiMismaArea(conversationId, telegramUserId, selection.teamId)) {
         conversationNudgeState.delete(conversationId);

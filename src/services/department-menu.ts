@@ -54,12 +54,12 @@ export const MENU_TEXT = VENTAS_ADMIN_ENABLED
  */
 export function buildDepartmentKeyboard(): InlineKeyboard {
   const kb = new InlineKeyboard()
-    .text('🛠 Soporte', `team:${TEAMS.SOPORTE_VE}:Soporte`)
-    .text('💼 Consultoría', `team:${TEAMS.CONSULTORIA_VE}:Consultoría`);
+    .text(boton(`team:${TEAMS.SOPORTE_VE}:Soporte`), `team:${TEAMS.SOPORTE_VE}:Soporte`)
+    .text(boton(`team:${TEAMS.CONSULTORIA_VE}:Consultoría`), `team:${TEAMS.CONSULTORIA_VE}:Consultoría`);
   if (VENTAS_ADMIN_ENABLED) {
     kb.row()
-      .text('🛒 Ventas', `team:${TEAMS.VENTAS_VE}:Ventas`)
-      .text('📋 Administración', `team:${TEAMS.ADMINISTRACION_VE}:Administración`);
+      .text(boton(`team:${TEAMS.VENTAS_VE}:Ventas`), `team:${TEAMS.VENTAS_VE}:Ventas`)
+      .text(boton(`team:${TEAMS.ADMINISTRACION_VE}:Administración`), `team:${TEAMS.ADMINISTRACION_VE}:Administración`);
   }
   return kb;
 }
@@ -82,11 +82,11 @@ export const SYSFAIL_OPTIONS_TEXT =
 /** Botones del triage de entrada: falla de sistema, status fiscal u otra consulta. */
 export function buildSysfailKeyboard(): InlineKeyboard {
   return new InlineKeyboard()
-    .text('🚨 Sí, no puedo vender', 'sysfail:yes')
+    .text(boton('sysfail:yes'), 'sysfail:yes')
     .row()
-    .text(FISCAL_STATUS_BUTTON, 'sysfail:fiscal')
+    .text(boton('sysfail:fiscal'), 'sysfail:fiscal')
     .row()
-    .text('➡️ No, es otra consulta', 'sysfail:no');
+    .text(boton('sysfail:no'), 'sysfail:no');
 }
 
 /** Text version of department menu for Chatwoot sync */
@@ -112,4 +112,37 @@ const COMMAND_TEAMS: Record<string, { teamId: number; label: string }> = {
  */
 export function resolveTeamFromCommand(command: string): { teamId: number; label: string } | null {
   return COMMAND_TEAMS[command] ?? null;
+}
+
+// ─── Lo que el cliente eligió, legible en Chatwoot (21-nov-2026) ───────────
+// Un botón pulsado llega a Chatwoot como mensaje del cliente. Antes llevaba el
+// dato crudo («sysfail:no», «team:5:Consultoría») y ibox lo borraba, así que el
+// agente veía «Este mensaje se ha eliminado». Ahora llega el texto del botón y
+// ibox lo traduce de vuelta a su dato para rutear.
+
+/** Dato del botón → texto que vio el cliente. Incluye todos los botones, también los apagados. */
+export const CALLBACK_BUTTON_LABELS: Record<string, string> = {
+  [`team:${TEAMS.SOPORTE_VE}:Soporte`]: '🛠 Soporte',
+  [`team:${TEAMS.CONSULTORIA_VE}:Consultoría`]: '💼 Consultoría',
+  [`team:${TEAMS.VENTAS_VE}:Ventas`]: '🛒 Ventas',
+  [`team:${TEAMS.ADMINISTRACION_VE}:Administración`]: '📋 Administración',
+  'sysfail:yes': '🚨 Sí, no puedo vender',
+  'sysfail:fiscal': FISCAL_STATUS_BUTTON,
+  'sysfail:no': '➡️ No, es otra consulta',
+};
+
+/**
+ * Texto de un botón (tal como queda en Chatwoot) → su dato. En grupos el texto
+ * llega con el nombre delante («Ana: 🛠 Soporte»). Devuelve null si no es un botón.
+ */
+export function callbackDataFromLabel(content: string): string | null {
+  for (const [data, label] of Object.entries(CALLBACK_BUTTON_LABELS)) {
+    if (content === label || content.endsWith(`: ${label}`)) return data;
+  }
+  return null;
+}
+
+/** Texto del botón para un dato; los teclados lo usan para no desalinearse del mapa. */
+function boton(data: string): string {
+  return CALLBACK_BUTTON_LABELS[data];
 }

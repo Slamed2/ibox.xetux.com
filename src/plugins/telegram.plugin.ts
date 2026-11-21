@@ -6,6 +6,7 @@ import { keepAliveHttpAgent, keepAliveHttpsAgent, chatwootService } from '../ser
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { TtlMap } from '../utils/ttl-map.js';
+import { CALLBACK_BUTTON_LABELS } from '../services/department-menu.js';
 
 // update_id de Telegram ya procesados. Telegram reenvía una actualización si no
 // le contestamos OK a tiempo; con el bot frenado por un 429 eso pasaba con cada
@@ -161,8 +162,10 @@ function callbackToMessage(update: any): any {
   const cb = update.callback_query;
   if (!cb?.message?.chat) return null;
 
-  // Keep raw callback data so the routing flow can parse teamId
+  // En Chatwoot va el texto del botón (lo que el cliente eligió); el routing
+  // lo traduce de vuelta a su dato. Un dato desconocido viaja crudo.
   const data = cb.data ?? '';
+  const text = CALLBACK_BUTTON_LABELS[data] ?? data;
 
   return {
     update_id: update.update_id,
@@ -171,7 +174,7 @@ function callbackToMessage(update: any): any {
       from: cb.from,
       chat: cb.message.chat,
       date: Math.floor(Date.now() / 1000),
-      text: data,
+      text,
     },
   };
 }
